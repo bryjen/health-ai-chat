@@ -1,0 +1,25 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Popover trigger that toggles the popover open state *@
+<button
+    data-slot="popover-trigger"
+    type="button"
+    class="@ClassBuilder.Merge(Class)"
+    @onclick="OnClick"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private Popover? PopoverRoot { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private void OnClick()
+    {
+        PopoverRoot?.Toggle();
+    }
+}
+

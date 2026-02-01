@@ -1,0 +1,24 @@
+@using WebFrontend.Components.UI.Shared
+@* Dropdown menu label component *@
+<div 
+    data-slot="dropdown-menu-label"
+    data-inset="@(Inset ? "true" : null)"
+    class="@GetClass()"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Inset { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string GetClass()
+    {
+        var baseClasses = "pt-3 pb-1 text-xs font-medium text-muted-foreground";
+        var paddingClasses = Inset ? "pl-8 pr-3" : "px-3";
+        
+        return ClassBuilder.Merge(baseClasses, paddingClasses, Class);
+    }
+}

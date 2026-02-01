@@ -1,0 +1,32 @@
+@inherits LayoutComponentBase
+
+<div class="relative container flex-1 shrink-0 items-center justify-center md:grid lg:max-w-none lg:grid-cols-2 lg:px-0 min-h-screen">
+    <div class="relative flex items-center justify-center lg:h-screen lg:p-8">
+
+        <div class="p-2 absolute top-6 left-6 z-20 flex items-center gap-2 text-lg font-medium text-white/80 cursor-pointer select-none transition-all duration-200 ease-in-out hover:bg-card/50 hover:brightness-175 rounded rounded-lg"
+             @onclick="@(() => Navigation.NavigateTo("/"))">
+            <svg class="w-8 h-8 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+            <span>
+                Conuhacks Health
+            </span>
+        </div>
+
+        <div class="relative mx-auto flex w-full flex-col justify-center gap-6 sm:w-[350px]">
+            @Body
+        </div>
+    </div>
+
+    <div class="text-primary relative hidden h-full flex-col p-10 lg:flex">
+        <div
+            class="bg-primary/5 absolute inset-0"
+            style="background-image:url(./authentication-bg.png);background-size:cover;background-position:center">
+        </div>
+        <div class="relative z-20 mt-auto max-w-3xl text-white/70">
+            <blockquote class="leading-normal text-balance">
+                &ldquo;This library has saved me countless hours of work and helped me deliver stunning ideas faster than ever before.&rdquo;
+            </blockquote>
+        </div>
+    </div>
+</div>

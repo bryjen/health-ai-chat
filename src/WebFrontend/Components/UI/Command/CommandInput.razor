@@ -1,0 +1,49 @@
+@using WebFrontend.Components.UI.Shared
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
+@* Command search input with icon wrapper.
+   Optimized for minimal re-renders while typing. *@
+<div
+    data-slot="command-input-wrapper"
+    class="flex h-10 items-center gap-3 rounded-full border border-border bg-background/70 px-4">
+    <svg class="size-4 shrink-0 opacity-50" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M15.5 15.5 20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="11" cy="11" r="6" stroke="currentColor" stroke-width="2" fill="none" />
+    </svg>
+    <input
+        data-slot="command-input"
+        type="text"
+        @ref="_inputRef"
+        class='@ClassBuilder.Merge("placeholder:text-muted-foreground flex h-10 w-full rounded-full bg-transparent text-base outline-none disabled:cursor-not-allowed disabled:opacity-50", Class)'
+        @onkeydown="OnKeyDown"
+        @oninput="HandleInput"
+        placeholder="@Placeholder"
+        autofocus="@AutoFocus"
+        @attributes="AdditionalAttributes" />
+</div>
+
+@code {
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public bool AutoFocus { get; set; } = false;
+    [Parameter] public EventCallback<KeyboardEventArgs> OnKeyDown { get; set; }
+    [Parameter] public EventCallback<string> SearchChanged { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private ElementReference _inputRef;
+
+    public async Task FocusAsync() => await _inputRef.FocusAsync();
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        if (!SearchChanged.HasDelegate)
+        {
+            return;
+        }
+
+        var value = e.Value?.ToString() ?? string.Empty;
+        await SearchChanged.InvokeAsync(value);
+    }
+}
+

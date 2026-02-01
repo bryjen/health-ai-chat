@@ -1,0 +1,23 @@
+@namespace WebFrontend.Components.UI.Dialog
+
+@* Dialog close button component *@
+<button
+    data-slot="dialog-close"
+    @onclick="HandleClose"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] public Dialog? ParentDialog { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task HandleClose()
+    {
+        if (ParentDialog != null)
+        {
+            await ParentDialog.CloseAsync();
+        }
+    }
+}

@@ -1,0 +1,31 @@
+@using WebFrontend.Components.UI.Shared
+@using WebFrontend.Components.UI.Accordion
+
+@* Accordion collapsible content: height on wrapper, opacity/translate on inner *@
+@if (_context is not null)
+{
+    <div
+        data-slot="accordion-content"
+        class='@ClassBuilder.Merge(
+            "overflow-hidden text-sm accordion-content-height",
+            _context.Open ? "max-h-[500px]" : "max-h-0",
+            Class)'
+        aria-hidden="@(!_context.Open)">
+        <div
+            @attributes="AdditionalAttributes"
+            class='@ClassBuilder.Merge(
+                "pt-0 pb-4 accordion-content-fade",
+                _context.Open ? "opacity-100" : "opacity-0")'>
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private AccordionItemContext? _context { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

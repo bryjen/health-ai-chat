@@ -1,0 +1,91 @@
+@page "/settings/personal-information"
+@layout SettingsLayout
+
+<PageTitle>Personal Information - Settings</PageTitle>
+
+<section class="space-y-8">
+    <header class="space-y-1">
+        <h1 class="text-3xl font-semibold text-foreground">Personal Information</h1>
+        <p class="text-sm text-muted-foreground">
+            Update your personal details and contact information.
+        </p>
+    </header>
+
+    <EditForm Model="@Model" OnValidSubmit="@HandleSave" class="space-y-6">
+        <DataAnnotationsValidator />
+
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="flex flex-col gap-2">
+                <label for="firstName" class="text-sm font-medium text-foreground">First Name</label>
+                <InputText id="firstName" @bind-Value="Model.FirstName" class="@InputClass" />
+                <ValidationMessage For="@(() => Model.FirstName)" />
+            </div>
+            <div class="flex flex-col gap-2">
+                <label for="lastName" class="text-sm font-medium text-foreground">Last Name</label>
+                <InputText id="lastName" @bind-Value="Model.LastName" class="@InputClass" />
+                <ValidationMessage For="@(() => Model.LastName)" />
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <label for="username" class="text-sm font-medium text-foreground">Username</label>
+            <InputText id="username" @bind-Value="Model.Username" class="@InputClass" />
+            <ValidationMessage For="@(() => Model.Username)" />
+        </div>
+
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="flex flex-col gap-2">
+                <label class="text-sm font-medium text-foreground">Phone Number</label>
+                <div class="flex gap-2">
+                    <select @bind="Model.PhoneCountryCode" class="@PhoneSelectClass">
+                        <option value="+1">+1</option>
+                        <option value="+44">+44</option>
+                        <option value="+33">+33</option>
+                        <option value="+49">+49</option>
+                        <option value="+81">+81</option>
+                    </select>
+                    <InputText id="phone" @bind-Value="Model.PhoneNumber" class="@($"{InputClass} flex-1")" placeholder="000 000 0000" />
+                </div>
+                <ValidationMessage For="@(() => Model.PhoneNumber)" />
+            </div>
+            <div class="flex flex-col gap-2">
+                <label for="country" class="text-sm font-medium text-foreground">Country</label>
+                <InputText id="country" @bind-Value="Model.Country" class="@InputClass" placeholder="United States" />
+            </div>
+        </div>
+
+        <div class="flex flex-col gap-2">
+            <label for="address" class="text-sm font-medium text-foreground">Address</label>
+            <InputText id="address" @bind-Value="Model.Address" class="@InputClass" />
+        </div>
+
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div class="flex flex-col gap-2">
+                <label for="city" class="text-sm font-medium text-foreground">City</label>
+                <InputText id="city" @bind-Value="Model.City" class="@InputClass" />
+            </div>
+            <div class="flex flex-col gap-2">
+                <label for="postalCode" class="text-sm font-medium text-foreground">Postal Code</label>
+                <InputText id="postalCode" @bind-Value="Model.PostalCode" class="@InputClass" />
+            </div>
+        </div>
+
+        <div class="flex justify-end pt-4">
+            <button type="submit" class="inline-flex items-center justify-center rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-60" disabled="@IsSaving">
+                @if (IsSaving)
+                {
+                    <span>Saving...</span>
+                }
+                else
+                {
+                    <span>Save Changes</span>
+                }
+            </button>
+        </div>
+    </EditForm>
+</section>
+
+@code {
+    private string InputClass => "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
+    private string PhoneSelectClass => "flex h-10 w-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none bg-[url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%3E%3Cpath%20d%3D%22M6%208l4%204%204-4%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E')] bg-[length:16px_16px] bg-[right_0.75rem_center] bg-no-repeat pr-8 cursor-pointer";
+}

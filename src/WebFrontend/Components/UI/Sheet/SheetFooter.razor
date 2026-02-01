@@ -1,0 +1,16 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Sheet footer region *@
+<div
+    data-slot="sheet-footer"
+    class='@ClassBuilder.Merge("mt-auto flex flex-col gap-2 p-4 border-t", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

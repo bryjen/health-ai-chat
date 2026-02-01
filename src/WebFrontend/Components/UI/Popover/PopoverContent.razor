@@ -1,0 +1,29 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Popover content positioned near its trigger *@
+@if (PopoverRoot?.Open == true)
+{
+    <div class="fixed inset-0 z-40" @onclick="Close"></div>
+    <div
+        data-slot="popover-content"
+        class='@ClassBuilder.Merge("bg-popover text-popover-foreground z-50 w-72 rounded-md border p-4 shadow-md", Class)'
+        style="position: absolute;"
+        @onclick:stopPropagation="true"
+        @attributes="AdditionalAttributes">
+        @ChildContent
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Popover? PopoverRoot { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private void Close()
+    {
+        PopoverRoot?.Close();
+    }
+}
+

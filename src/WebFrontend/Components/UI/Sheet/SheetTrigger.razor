@@ -1,0 +1,28 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Sheet trigger button or arbitrary content that opens the sheet when clicked *@
+<button
+    data-slot="sheet-trigger"
+    type="button"
+    class="@ClassBuilder.Merge(Class)"
+    @onclick="OnClick"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</button>
+
+@code {
+    [CascadingParameter] private Sheet? SheetRoot { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task OnClick()
+    {
+        if (SheetRoot is not null)
+        {
+            await SheetRoot.SetOpenAsync(true);
+        }
+    }
+}
+

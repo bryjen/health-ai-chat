@@ -1,0 +1,16 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Scrollable list of command items *@
+<div
+    data-slot="command-list"
+    class='@ClassBuilder.Merge("max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

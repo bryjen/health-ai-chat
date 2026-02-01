@@ -1,0 +1,24 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Sheet root with two-way bound Open state, similar to Dialog *@
+<CascadingValue Value="this">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+
+    public async Task SetOpenAsync(bool open)
+    {
+        if (Open == open) return;
+        Open = open;
+        if (OpenChanged.HasDelegate)
+        {
+            await OpenChanged.InvokeAsync(open);
+        }
+        StateHasChanged();
+    }
+}
+

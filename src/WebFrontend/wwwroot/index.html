@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PulseAI Health | Loading</title>
+    <base href="/" />
+    <link rel="preload" id="webassembly" />
+    <link rel="stylesheet" href="css/app.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+        rel="stylesheet" />
+    <!--
+    <link href="WebFrontend.styles.css" rel="stylesheet" />
+    -->
+    <script type="importmap"></script>
+</head>
+
+<body class="font-display bg-background-dark">
+    <div id="app">
+        <!-- Blazor app will be rendered here -->
+    </div>
+
+    <!-- Loading overlay - persists until Blazor loads + 1 second delay -->
+    <div id="blazor-loading-overlay"
+        class="fixed inset-0 z-50 flex flex-col items-center justify-center min-h-screen p-6 text-white bg-background-dark">
+        <main class="relative z-10 flex flex-col items-center justify-center min-h-screen p-6 text-white">
+            <div class="flex flex-col items-center w-full max-w-md space-y-8">
+                <div class="flex flex-col items-center space-y-4">
+                    <h1 class="text-4xl font-bold tracking-tight">
+                        PulseAI <span class="text-primary">Health</span>
+                    </h1>
+                </div>
+                <div class="w-full space-y-3">
+                    <div class="h-1.5 w-full bg-white/10 rounded-full overflow-hidden border border-white/5">
+                        <div
+                            class="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full relative overflow-hidden loading-progress-bar">
+                            <div
+                                class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent progress-shimmer">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-center items-center px-1">
+                        <span
+                            class="text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold loading-status-text"></span>
+                    </div>
+                </div>
+                <div class="text-center space-y-2">
+                    <p class="text-sm font-medium text-white/80 leading-relaxed max-w-xs mx-auto loading-quote">
+                    </p>
+                </div>
+            </div>
+        </main>
+        <div class="fixed bottom-8 left-0 right-0 z-10 text-center">
+            <p class="text-[10px] uppercase tracking-widest text-white/40">
+                POWERING PREEMPTIVE CARE
+            </p>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+    <script src="js/loading.js"></script>
+    <script src="js/scroll-toggle.js"></script>
+</body>
+
+</html>

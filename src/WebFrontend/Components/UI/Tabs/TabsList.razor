@@ -1,0 +1,23 @@
+@using WebFrontend.Components.UI.Shared
+@using WebFrontend.Components.UI.Tabs
+
+@* Tabs list container *@
+<div
+    data-slot="tabs-list"
+    data-variant="@Variant"
+    class='@ClassBuilder.Merge("rounded-lg p-[3px] inline-flex w-fit items-center justify-center text-muted-foreground group/tabs-list", Variant == "line" ? "gap-1 bg-transparent" : "bg-muted", Orientation == "vertical" ? "h-fit flex-col" : "h-9", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] private TabsContext? _context { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Variant { get; set; } = "default"; // default | line
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string Orientation => _context?.Orientation ?? "horizontal";
+}
+

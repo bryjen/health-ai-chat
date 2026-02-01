@@ -1,0 +1,74 @@
+<AuthorizeView>
+    <Authorized>
+        <DropdownMenu Side="right" Align="end" SideOffset="12">
+            <DropdownMenuTrigger>
+                <button class="flex items-center w-full p-2 rounded-lg hover:bg-accent transition-colors text-left group">
+                    <Avatar Size="default" Class="border border-border">
+                        <AvatarFallback Class="bg-primary/10 text-primary font-medium">
+                            @GetInitials(context)
+                        </AvatarFallback>
+                    </Avatar>
+                    <div class="ml-3 flex-1 min-w-0">
+                        <p class="text-sm font-medium text-foreground truncate">
+                            @GetDisplayName(context)
+                        </p>
+                        <p class="text-xs text-muted-foreground truncate">
+                            @GetEmail(context)
+                        </p>
+                    </div>
+                    <LuChevronsUpDown class="ml-auto w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+                </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent Class="mb-2 w-56 p-0">
+
+                <DropdownMenuLabel Class="p-0">
+                    <div class="flex items-center gap-2 px-3 py-3">
+
+                        <Avatar Size="sm" Class="border border-border">
+                            <AvatarFallback Class="bg-primary/10 text-primary text-[10px]">
+                                @GetInitials(context)
+                            </AvatarFallback>
+                        </Avatar>
+
+                        <div class="flex flex-col space-y-0.5">
+                            <p class="text-xs font-medium leading-none">@GetDisplayName(context)</p>
+                            <p class="text-[10px] leading-none text-muted-foreground">@GetEmail(context)</p>
+                        </div>
+                    </div>
+                </DropdownMenuLabel>
+
+                <DropdownMenuSeparator Class="m-0 -mx-0"/>
+
+                <div class="p-1.5">
+                    <DropdownMenuItem OnClick="@(() => Navigation.NavigateTo("/settings/personal-information"))">
+                        <LuUser class="h-4 w-4"/>
+                        <span>Account</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem OnClick="@(() => Navigation.NavigateTo("/settings/billing"))">
+                        <LuCreditCard class="h-4 w-4"/>
+                        <span>Billing</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem OnClick="@(() => Navigation.NavigateTo("/settings/notifications"))">
+                        <LuBell class="h-4 w-4"/>
+                        <span>Notifications</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
+                    <DropdownMenuItem OnClick="HandleLogout">
+                        <LuLogOut class="h-4 w-4"/>
+                        <span>Log out</span>
+                    </DropdownMenuItem>
+                </div>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    </Authorized>
+    <NotAuthorized>
+        <div class="flex flex-col gap-2 p-2">
+            <NavLink href="/login" class="w-full px-3 py-2 text-sm text-center bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors">
+                Login
+            </NavLink>
+            <NavLink href="/register" class="w-full px-3 py-2 text-sm text-center border border-input bg-background text-foreground rounded-md hover:bg-accent transition-colors">
+                Register
+            </NavLink>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>

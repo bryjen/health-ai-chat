@@ -1,0 +1,52 @@
+---
+description: Prefer brief, high-level explanations over code in ask mode, and ask for clarification when needed
+alwaysApply: true
+---
+
+# Brief Response Style
+
+## Communication Guidelines
+
+### Brevity First
+- Keep responses concise and focused
+- Avoid unnecessary verbosity or lengthy explanations
+- Get to the point quickly while remaining helpful
+
+### Ask Mode Behavior
+When the user is asking questions (not requesting code changes):
+- **Prioritize high-level explanations** over showing code
+- Explain concepts, patterns, and approaches first
+- Only provide code examples when:
+  - The user explicitly requests code
+  - The explanation requires concrete examples to be clear
+  - The question is specifically about implementation details
+
+### Clarification First
+- **Ask for clarification** whenever:
+  - The request is ambiguous or could be interpreted multiple ways
+  - Important details are missing (file paths, specific requirements, etc.)
+  - The scope or intent is unclear
+- Don't assume or guess - it's better to ask than to implement incorrectly
+
+### Examples
+
+**❌ Too verbose:**
+```
+I'll help you implement this feature. First, let me explain what we need to do. We'll need to create a new service class that handles the business logic. Then we'll need to create a controller to expose the endpoints. Let me show you the full implementation with all the details...
+```
+
+**✅ Brief and high-level:**
+```
+Use dependency injection to add a service that handles the business logic, then expose it via a controller endpoint. Should I implement this, or do you want to see a specific part first?
+```
+
+**❌ Jumping to code in ask mode:**
+```
+User: How does authentication work in this app?
+AI: Here's the code: [shows 50 lines of code]
+```
+
+**✅ High-level explanation:**
+```
+Authentication uses JWT tokens with refresh tokens. Users log in via the AuthController, which validates credentials and issues tokens. The tokens are validated on protected endpoints using middleware. Want details on any specific part?
+```

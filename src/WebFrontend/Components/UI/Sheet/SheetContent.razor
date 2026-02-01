@@ -1,0 +1,69 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Sliding side panel content with overlay *@
+@if (_visible)
+{
+    <div class="fixed inset-0 z-40 bg-black/50" @onclick="CloseAsync"></div>
+    <div
+        data-slot="sheet-content"
+        class='@ClassBuilder.Merge($"bg-card text-card-foreground fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col rounded-xl border border-border shadow-sm {AnimationClass}", Class)'
+        @attributes="AdditionalAttributes">
+        <div class="flex-1 overflow-y-auto p-4">
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private Sheet? SheetRoot { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private bool _visible;
+    private bool _isExiting;
+
+    private string AnimationClass =>
+        _isExiting
+            ? "animate-[sheet-out_220ms_ease-in-out_forwards]"
+            : "animate-[sheet-in_220ms_ease-in-out_forwards]";
+
+    protected override void OnParametersSet()
+    {
+        var open = SheetRoot?.Open == true;
+
+        if (open && !_visible)
+        {
+            // Drawer just opened: show and play enter animation
+            _isExiting = false;
+            _visible = true;
+        }
+        else if (!open && _visible && !_isExiting)
+        {
+            // Drawer just closed: play exit animation, then hide
+            _ = StartExitAnimationAsync();
+        }
+    }
+
+    private async Task StartExitAnimationAsync()
+    {
+        _isExiting = true;
+        StateHasChanged();
+
+        await Task.Delay(220);
+
+        _visible = false;
+        _isExiting = false;
+        StateHasChanged();
+    }
+
+    private async Task CloseAsync()
+    {
+        if (SheetRoot is not null)
+        {
+            await SheetRoot.SetOpenAsync(false);
+        }
+    }
+}
+

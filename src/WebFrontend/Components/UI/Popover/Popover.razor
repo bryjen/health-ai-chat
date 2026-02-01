@@ -1,0 +1,28 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Popover root with local open state and cascading context *@
+<CascadingValue Value="this">
+    @ChildContent
+</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    public bool Open { get; private set; }
+
+    public event Action? OnStateChanged;
+
+    public void Toggle()
+    {
+        Open = !Open;
+        OnStateChanged?.Invoke();
+    }
+
+    public void Close()
+    {
+        if (!Open) return;
+        Open = false;
+        OnStateChanged?.Invoke();
+    }
+}
+

@@ -1,0 +1,62 @@
+@using WebFrontend.Components.UI.Shared
+@namespace WebFrontend.Components.UI.Select
+
+@* Fully custom dropdown-style select (no native <select>, no DropdownMenu dependency) *@
+<div class="@ClassBuilder.Merge("relative inline-block w-full text-left", OuterClass)">
+    <button type="button"
+            class='@ClassBuilder.Merge("flex w-full items-center justify-between rounded-full border border-input bg-background/80 px-3 py-2.5 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer", Class)'
+            disabled="@Disabled"
+            @onclick="ToggleAsync"
+            @ref="_triggerRef">
+        <span class="truncate text-left">
+            @DisplayText
+        </span>
+        <span class="ml-2 flex items-center text-muted-foreground">
+            <svg class="h-4 w-4 transition-transform duration-150 @( _open ? "rotate-180" : "" )"
+                 viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+        </span>
+    </button>
+
+    @if (_open)
+    {
+        @* overlay to close on outside click *@
+        <div class="fixed inset-0 z-40" @onclick="CloseAsync"></div>
+
+        <div class="absolute z-50 w-full overflow-hidden rounded-xl border border-border bg-card shadow-lg @GetPositionClasses() @AnimationClass"
+             @onclick:stopPropagation="true">
+            @if (!string.IsNullOrEmpty(Label))
+            {
+                <div class="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground">
+                    @Label
+                </div>
+            }
+
+            <ul class="py-1.5">
+                @foreach (var option in Options)
+                {
+                    var isSelected = IsOptionSelected(option);
+                    <li>
+                        <button type="button"
+                                disabled="@option.Disabled"
+                                class="@GetItemClasses(option, isSelected)"
+                                @onclick="() => SelectAsync(option.Value)">
+                            @if (isSelected)
+                            {
+                                <span class="mr-2 flex shrink-0 items-center">
+                                    <svg class="h-4 w-4 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </span>
+                            }
+                            <span class="flex-1 text-left truncate">
+                                @option.Label
+                            </span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+</div>

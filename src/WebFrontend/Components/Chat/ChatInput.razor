@@ -1,0 +1,59 @@
+@using WebFrontend.Components.UI.Select
+@namespace WebFrontend.Components.Chat
+
+<div class="bg-background">
+    <div class="max-w-3xl mx-auto px-4 pb-4">
+        <form @onsubmit="HandleFormSubmit" @onsubmit:preventDefault="true" class="relative" @onclick:stopPropagation="true">
+            <div class="relative bg-muted rounded-lg border border-border">
+                <textarea
+                    value="@InputText"
+                    @oninput="OnInputChanged"
+                    @onkeydown="HandleKeyDown"
+                    placeholder="How can I help you today?"
+                    class="w-full px-4 py-3 pr-32 pb-12 rounded-lg bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none resize-none min-h-[120px] max-h-32 overflow-y-auto"
+                    rows="1"
+                    disabled="@(IsLoading || !IsConnected)">
+                </textarea>
+
+                @* Bottom Left Controls (currently disabled) *@
+                <div class="absolute bottom-3 left-3 flex items-center gap-2">
+                    <Tooltip>
+                        <TooltipTrigger Context="ctx">
+                            <ToggleButton VariantUntoggled="outline"
+                                          VariantToggled="default"
+                                          Size="icon"
+                                          @attributes="ctx.Attributes">
+                                <LuBrain></LuBrain>
+                            </ToggleButton>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            <p>Extended Thinking</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+
+                <div class="absolute bottom-3 right-3 flex items-center gap-2">
+                    <Select
+                        Value="@_selectedModel"
+                        ValueChanged="HandleModelChanged"
+                        Placeholder="Select a model"
+                        Label="Model"
+                        Options="@_modelOptions"
+                        Direction="DropdownDirection.Auto"
+                        Class="w-45 bg-[#1c1c1c] rounded-xl">
+                    </Select>
+
+                    <button
+                        type="submit"
+                        disabled="@(string.IsNullOrWhiteSpace(InputText) || IsLoading || !IsConnected)"
+                        class="p-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+

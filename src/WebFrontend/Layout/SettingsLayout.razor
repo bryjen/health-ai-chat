@@ -1,0 +1,88 @@
+@using WebFrontend.Components.UI.Shared
+@inherits LayoutComponentBase
+
+@Render
+
+@code {
+
+    private RenderFragment Render => __builder =>
+    {
+        <div class="relative h-[99vh] w-[99vw] grid grid-cols-[3fr_10fr] gap-x-12 px-56 pt-32 bg-background overflow-hidden">
+
+            <div class="p-2 absolute top-6 left-6 z-20 flex items-center gap-2 text-lg font-medium text-white/80 cursor-pointer select-none transition-all duration-200 ease-in-out hover:bg-card/50 hover:brightness-175 rounded rounded-lg"
+                 @onclick="@(() => NavigationManager.NavigateTo("/"))">
+                <svg class="w-8 h-8 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <span>
+                    Conuhacks Health
+                </span>
+            </div>
+
+            @RenderNavBar
+            <div class="overflow-y-auto scrollbar-hide">
+                @Body
+            </div>
+        </div>
+    };
+
+    private RenderFragment RenderNavBar => __builder =>
+    {
+        <div class="flex flex-col gap-8">
+
+            <div class="flex flex-col gap-1 px-4">
+                <span class="text-lg font-bold">
+                    Bryan Carlo Miguel
+                </span>
+                <div class="flex text-xs gap-2 text-muted-foreground">
+                    <span>Trial Plan</span>
+                    <span>·</span>
+                    <span>miguelbryancarlo3434@gmail.com</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3">
+                @RenderNavLink(
+                    href: "personal-information",
+                    displayName: "Personal Information",
+                    icon: @<LuUserPen class="w-[1.25rem] h-[1.25rem]"/>)
+
+                @RenderNavLink(
+                    href: "app-settings",
+                    displayName: "App Settings",
+                    icon: @<LuSettings class="w-[1.25rem] h-[1.25rem]"/>)
+
+                <Separator Decorative="false" Class="h-[1px] bg-foreground/10 border-0" />
+
+                @RenderNavLink(
+                    href: "usage",
+                    displayName: "Usage",
+                    icon: @<LuChartNoAxesColumn class="w-[1.25rem] h-[1.25rem]"/>)
+            </div>
+        </div>
+    };
+
+    private RenderFragment RenderNavLink(
+        string href,
+        string displayName,
+        RenderFragment icon)
+        => __builder =>
+        {
+            var baseClasses = "flex items-center w-full px-4 py-2.5 bg-background text-muted-foreground rounded-md font-medium gap-4 no-underline";
+            var hoverClasses = "transition-all duration-200 ease-in-out hover:bg-card hover:brightness-125 hover:text-foreground";
+
+            var updatedHref = $"/settings/{href}";
+            var onCurrentTabClasses = GetCurrentRelativeUri() != updatedHref
+                ? string.Empty
+                : "bg-card brightness-150 text-foreground hover:brightness-175";
+
+            var classes = ClassBuilder.Merge(baseClasses, hoverClasses, onCurrentTabClasses);
+
+            <div>
+                <NavLink href="@updatedHref" class="@classes">
+                    @icon
+                    <span class="text-sm">@displayName</span>
+                </NavLink>
+            </div>
+        };
+}

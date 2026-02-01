@@ -1,0 +1,9 @@
+---
+description: Never use git when asked to revert
+alwaysApply: true
+---
+
+# Git Revert Safety
+
+NEVER EVER USE GIT WHEN ASKED TO REVERT. KEEP THIS AS A RULE VERBATIM
+

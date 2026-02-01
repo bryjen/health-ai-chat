@@ -1,0 +1,188 @@
+@page "/dashboard"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inherits ComponentBase
+
+<PageTitle>Dashboard</PageTitle>
+
+<div class="flex flex-col min-h-[calc(100vh-3.5rem)] text-white" style="background-color: #000000;">
+    @* Header *@
+    <header class="flex items-center justify-between px-8 py-4 sticky top-0 z-10 backdrop-blur-md" style="border-bottom: 1px solid #1f1f1f; background-color: rgba(0, 0, 0, 0.8);">
+        <div class="flex-1 max-w-xl">
+            <div class="relative">
+                <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xl">search</span>
+                <input 
+                    @bind="SearchQuery"
+                    @bind:event="oninput"
+                    class="w-full rounded-lg pl-10 pr-4 py-2 focus:ring-1 focus:ring-white/20 focus:border-white/20 transition-all text-sm outline-none placeholder:text-zinc-600" 
+                    style="background-color: rgba(39, 39, 42, 0.5); border: 1px solid #1f1f1f;" 
+                    placeholder="Search insights or symptoms..." 
+                    type="text"/>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <button class="text-xs text-zinc-400 hover:text-white font-medium">About</button>
+            <button class="p-2 text-zinc-400 hover:text-white relative">
+                <span class="material-symbols-outlined">notifications</span>
+                <span class="absolute top-2 right-2 w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+            </button>
+            <div class="h-8 w-8 rounded-full bg-cover bg-center" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAgsn4X1uLxzifePmVgK_cBBonOOuREMBNoPs8EsdNFchahbSznaU_504WIB6vIpeTdV0RzVFzXcspCTNhb4Yz7PfLyOOB4djF8bcrxNjIv9Wm5nk6i62n4QWlw4zCbTNdi6vmqDLOyAwgR_ZhcuL7Q3aVRELvp160r743LvE2cbuusIF1L4B8Fq4m03EQqoU6jATZGYjxeyfaNcz82XpvphHCxp054Fz2-zKZhQLy2a_jpy8Mvjpjzc_XRGHHfTT0ev2P4VutHT8s'); border: 1px solid #1f1f1f;"></div>
+        </div>
+    </header>
+
+    @* Main Content *@
+    <div class="flex-1 overflow-y-auto scrollbar-hide">
+        <div class="p-8 max-w-7xl mx-auto w-full space-y-10">
+        @* Health Overview Header *@
+        <div class="flex flex-wrap justify-between items-end gap-4">
+            <div class="flex flex-col gap-1">
+                <h2 class="text-4xl font-black tracking-tight text-white">Health Overview</h2>
+                <p class="text-zinc-500 font-medium">Based on your recent AI conversations and symptom logs.</p>
+            </div>
+            <div class="flex gap-3">
+                <button class="px-4 py-2 rounded-lg text-xs font-semibold hover:bg-zinc-800 transition-colors flex items-center gap-2" style="background-color: #18181b; border: 1px solid #1f1f1f;">
+                    <span class="material-symbols-outlined text-lg">calendar_today</span> Last 14 Days
+                </button>
+                <button class="px-4 py-2 bg-white text-black rounded-lg text-xs font-bold hover:bg-zinc-200 transition-colors flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">add</span> New Log
+                </button>
+            </div>
+        </div>
+
+        @* Dashboard Grid *@
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
+            @* Left Column - 2/3 width *@
+            <div class="lg:col-span-2 space-y-10">
+                @* Possible Conditions Card *@
+                <div class="rounded-xl overflow-hidden" style="background-color: #121212; border: 1px solid #1f1f1f;">
+                    <div class="p-6 flex justify-between items-center" style="border-bottom: 1px solid #1f1f1f;">
+                        <h3 class="text-base font-bold flex items-center gap-2 tracking-wide">
+                            <span class="material-symbols-outlined text-zinc-400">monitoring</span>
+                            POSSIBLE CONDITIONS
+                        </h3>
+                        <span class="text-[10px] font-black px-2 py-0.5 border border-zinc-700 text-zinc-400 rounded-full">@Conditions.Count DETECTED</span>
+                    </div>
+                    <div>
+                        @if (IsLoading)
+                        {
+                            <div class="p-6 text-center text-zinc-500">Loading conditions...</div>
+                        }
+                        else if (ErrorMessage != null)
+                        {
+                            <div class="p-6 text-center text-red-500">@ErrorMessage</div>
+                        }
+                        else if (!Conditions.Any())
+                        {
+                            <div class="p-6 text-center text-zinc-500">No assessments available yet. Start a conversation to get insights.</div>
+                        }
+                        else
+                        {
+                            @for (int i = 0; i < Conditions.Count; i++)
+                            {
+                                var condition = Conditions[i];
+                                <div class="flex items-center gap-6 p-6 hover:bg-white/[0.02] transition-colors cursor-pointer group" style="@(i > 0 ? "border-top: 1px solid #1f1f1f;" : "")">
+                                    <div class="size-12 rounded-lg flex items-center justify-center" style="background-color: #18181b; border: 1px solid #1f1f1f;">
+                                        <span class="material-symbols-outlined text-white">@condition.Icon</span>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex justify-between mb-2">
+                                            <p class="font-bold text-white">@condition.Name</p>
+                                            <p class="@condition.ConfidenceColor font-bold text-xs">@condition.Confidence% Confidence</p>
+                                        </div>
+                                        <div class="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                            <div class="h-full @condition.ProgressColor @condition.ShadowClass" style="width: @condition.Confidence%"></div>
+                                        </div>
+                                        <p class="text-xs text-zinc-500 mt-2 font-medium">@condition.Description</p>
+                                    </div>
+                                    <span class="material-symbols-outlined text-zinc-700 group-hover:text-white transition-colors">arrow_forward_ios</span>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+
+                @* Symptom Severity Chart Card *@
+                <div class="rounded-xl p-8" style="background-color: #121212; border: 1px solid #1f1f1f;">
+                    <div class="flex items-center justify-between mb-8">
+                        <h3 class="text-base font-bold flex items-center gap-2 tracking-wide uppercase">
+                            <span class="material-symbols-outlined text-zinc-400">timeline</span>
+                            Symptom Severity
+                        </h3>
+                        <div class="flex gap-4">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                                <span class="text-[10px] text-zinc-500 font-bold">INTENSITY</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="h-56 flex items-end justify-between gap-4 px-2">
+                        @if (IsLoading)
+                        {
+                            <div class="w-full text-center text-zinc-500">Loading severity data...</div>
+                        }
+                        else if (!SymptomDays.Any() || SymptomDays.All(d => d.Height <= 10))
+                        {
+                            <div class="w-full text-center text-zinc-500">No symptom severity data for this week</div>
+                        }
+                        else
+                        {
+                            @foreach (var day in SymptomDays)
+                            {
+                                <div class="flex-1 flex flex-col items-center gap-4">
+                                    <div class="w-full @day.BarClass @day.ShadowClass rounded-t-sm transition-all hover:bg-blue-500/40" style="height: @day.Height%"></div>
+                                    <p class="text-[10px] font-bold @day.TextClass">@day.Label</p>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Right Column - 1/3 width *@
+            <div class="space-y-10">
+                @* Recommended Specialists Card *@
+                <div class="rounded-xl p-6 flex flex-col gap-6" style="background-color: #121212; border: 1px solid #1f1f1f;">
+                    <div>
+                        <h3 class="text-base font-bold flex items-center gap-2 tracking-wide uppercase">
+                            <span class="material-symbols-outlined text-zinc-400">medical_services</span>
+                            RECOMMENDED
+                        </h3>
+                        <p class="text-xs text-zinc-500 mt-1 font-medium">Highly rated specialists for you.</p>
+                    </div>
+                    <div class="space-y-4">
+                        @foreach (var specialist in Specialists)
+                        {
+                            <div class="p-5 rounded-xl" style="border: 1px solid #1f1f1f; background-color: rgba(39, 39, 42, 0.3);">
+                                <div class="flex items-center gap-4 mb-5">
+                                    <div class="size-12 rounded-full bg-cover bg-center" style="background-image: url('@specialist.ImageUrl'); border: 1px solid #1f1f1f;"></div>
+                                    <div>
+                                        <p class="font-bold text-sm text-white">@specialist.Name</p>
+                                        <p class="text-xs @specialist.SpecialtyColor font-semibold uppercase tracking-wider">@specialist.Specialty</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 mb-5 text-[11px] font-medium text-zinc-500">
+                                    <span class="material-symbols-outlined text-sm">@specialist.LocationIcon</span> @specialist.Availability
+                                </div>
+                                <button class="w-full py-2.5 @specialist.ButtonClass font-bold rounded-lg text-xs hover:bg-zinc-200 transition-all">@specialist.ButtonText</button>
+                            </div>
+                        }
+                    </div>
+                    <button class="text-center text-[11px] font-bold text-zinc-500 hover:text-white uppercase tracking-widest transition-colors">View All Specialists</button>
+                </div>
+
+                @* Daily Insight Card *@
+                <div class="relative rounded-xl overflow-hidden aspect-[4/3] group cursor-pointer" style="border: 1px solid #1f1f1f;">
+                    <div class="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent z-10"></div>
+                    <div class="absolute inset-0 bg-cover bg-center group-hover:scale-105 transition-transform duration-700" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAzZFxGKX2A59OmNMYV6KQOzP6TdirppJWwhtGIberHE8_v9y5dXvi49mSnbBfCbNUKxIZw0Ax197xBYgSFHm8w2qsdY5sMPDDGvtIgijRjFG0MpEgtmEuYyQQkDAIpgnRSbLgVtuQfqefaGk821TVy3niS7aFjhkfvkUj60F9n2siPKZbR6oJdnTXI8LvSxKDfGY9pWwJV0l6WKyfZCIAdaJGH-fIUUKDzn-75z0TZc_encrh2OTkmTdudKbRRHEQpcv6y0TBrtBQ')"></div>
+                    <div class="absolute bottom-6 left-6 right-6 z-20">
+                        <span class="bg-blue-500 text-white text-[9px] font-black px-2 py-0.5 rounded-sm mb-3 inline-block tracking-tighter">DAILY INSIGHT</span>
+                        <h4 class="text-white font-bold text-lg leading-tight">Improving Indoor Air Quality</h4>
+                        <p class="text-zinc-400 text-xs mt-2 leading-relaxed">Simple habits to reduce household allergens effectively.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="h-16 shrink-0"></div>
+        </div>
+    </div>
+</div>
+

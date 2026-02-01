@@ -1,0 +1,23 @@
+@namespace WebFrontend.Components.UI.Command
+
+@* Command palette list item with icon and optional shortcut *@
+<CommandItem OnSelect="OnSelect" Class="px-4 py-2.5">
+    <span class="mr-3 flex h-6 w-6 items-center justify-center rounded-sm border border-border bg-background text-sm">
+        @Icon
+    </span>
+    <span>@Label</span>
+    @if (!string.IsNullOrWhiteSpace(Shortcut))
+    {
+        <span class="ml-auto text-[0.7rem] font-mono tracking-[0.18em] text-muted-foreground">
+            @Shortcut
+        </span>
+    }
+</CommandItem>
+
+@code {
+    [Parameter] public string Icon { get; set; } = string.Empty;
+    [Parameter] public string Label { get; set; } = string.Empty;
+    [Parameter] public string? Shortcut { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
+}
+

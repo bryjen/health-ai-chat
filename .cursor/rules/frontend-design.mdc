@@ -1,0 +1,119 @@
+---
+description: Frontend design standards for creating distinctive, production-grade UI with shadcn styling
+alwaysApply: true
+---
+
+# Frontend Design Standards
+
+## Design Philosophy
+- Avoid generic AI aesthetics (centered cards, rounded corners everywhere, pastel gradients)
+- Create distinctive, production-grade interfaces with **shadcn/ui styling patterns**
+- Follow modern design principles: hierarchy, contrast, whitespace
+- Design should feel intentional, not template-generated
+- **Primary styling system: shadcn/ui components and design tokens**
+
+## Component Standards
+- **Use shadcn/ui components as the foundation** - follow shadcn design patterns strictly
+- Apply Tailwind utilities for custom styling that complements shadcn
+- No inline styles unless absolutely necessary
+- Consistent spacing scale: 4, 8, 12, 16, 24, 32, 48, 64px
+- **Match shadcn's visual language**: subtle borders, clean shadows, minimal rounded corners
+
+## Visual Hierarchy
+- Clear focal points - guide user attention
+- Proper typography scale (text-sm, text-base, text-lg, text-xl, text-2xl)
+- Generous whitespace - don't cram elements
+- Strategic use of color - not everything needs color
+- Elevation/depth through shadows (shadcn-style), not just borders
+
+## Layout Patterns
+- Grid-based layouts over centered containers
+- Asymmetric balance over perfect symmetry
+- Content-first - let content dictate layout, not templates
+- Mobile-first responsive design
+
+## Color & Typography (shadcn-inspired)
+- Maximum 3-4 colors per screen (primary, accent, text, background)
+- Use shadcn color tokens: `bg-background`, `text-foreground`, `border`, `ring`
+- Use color for emphasis, not decoration
+- Contrast ratios meet WCAG AA (4.5:1 for text)
+- Font weights: Use bold strategically for hierarchy
+- Line height: 1.5 for body text, 1.2 for headings
+
+## Interactions
+- Hover states for all interactive elements (shadcn-style transitions)
+- Loading states for async operations
+- Smooth transitions (transition-all duration-200)
+- Keyboard navigation support
+- Focus states with ring utilities (shadcn pattern)
+
+## Anti-Patterns to Avoid
+- ❌ Everything centered with `mx-auto`
+- ❌ Cards with excessive padding and rounded corners
+- ❌ Pastel gradients as backgrounds
+- ❌ Icons for everything
+- ❌ Unnecessary animations
+- ❌ Generic "Welcome back, User!" hero sections
+- ❌ Overly symmetrical layouts
+- ❌ All buttons the same size/prominence
+- ❌ Deviating from shadcn design patterns
+
+## Before Generating UI
+1. Ask about the content/data structure
+2. Consider user's primary goal on this page
+3. Sketch information hierarchy
+4. Choose appropriate layout pattern
+5. Select 1-2 accent colors maximum (shadcn palette)
+
+## Example Good Patterns
+
+### Dashboard
+- Asymmetric grid with key metric prominent
+- Subtle backgrounds for data sections (shadcn card style)
+- Consistent card elevation (shadcn shadow utilities)
+- Clear visual scan path (F-pattern or Z-pattern)
+
+### Forms
+- Single column layout (easier to scan)
+- Field labels above inputs, not placeholders (shadcn form pattern)
+- Group related fields with whitespace
+- Clear error states inline (shadcn error styling)
+- Prominent submit button (shadcn button variants)
+
+### Data Tables
+- Alternating row backgrounds OR no backgrounds
+- Left-aligned text, right-aligned numbers
+- Fixed header on scroll
+- Hover states on rows (shadcn table pattern)
+- Pagination or infinite scroll, not both
+
+## Blazor-Specific Standards
+- Use Pango UI components as base (already installed)
+- Enhance with Tailwind utilities that match shadcn aesthetics
+- Keep component hierarchy shallow (max 3 levels)
+- Use `@code` block for state, not inline
+- Responsive: Use Tailwind breakpoints (sm:, md:, lg:)
+- Apply shadcn styling patterns to Blazor components
+
+## UI Quick Wins
+- Always use `space-y-4` or `gap-4` instead of manual margins
+- Default spacing: p-6 for cards, p-4 for dense UI
+- Button hierarchy: Only ONE primary button per screen (shadcn button variants)
+- Images: Use `aspect-ratio` utilities, never fixed heights
+- Loading: Show skeletons, not spinners (shadcn skeleton component)
+- Empty states: Add helpful text + illustration, not just "No data"
+
+## shadcn Styling Emphasis
+- **Always reference shadcn design system** when creating components
+- Use shadcn's border, shadow, and spacing patterns
+- Match shadcn's subtle, clean aesthetic - no heavy decorations
+- Follow shadcn component API patterns (variants, sizes, etc.)
+- Use shadcn color palette: neutral grays, subtle accents
+- Apply shadcn's focus ring patterns for accessibility
+
+## When in Doubt
+- Less is more - remove decoration
+- Content first - style second
+- Test with real data, not lorem ipsum
+- Check mobile view always
+- **Default to shadcn patterns** - they're production-tested and accessible

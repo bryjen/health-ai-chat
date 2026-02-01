@@ -1,0 +1,173 @@
+@using WebFrontend.Components.UI.Command
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@inject WebFrontend.Services.ScrollLockService ScrollLockService
+
+<Card>
+    <CardHeader>
+        <CardTitle>Command Palette</CardTitle>
+        <CardDescription>Keyboard-first navigation and actions.</CardDescription>
+    </CardHeader>
+    <CardContent>
+        <div class="space-y-3">
+            <p class="text-xs text-muted-foreground">
+                Press <kbd class="rounded border bg-muted px-1.5 py-0.5 text-[0.7rem] font-mono">Ctrl</kbd>+<kbd class="rounded border bg-muted px-1.5 py-0.5 text-[0.7rem] font-mono">K</kbd> or use the button below.
+            </p>
+            <Button Size="sm" Variant="outline" @onclick="OpenCommandPalette">
+                Open command palette
+            </Button>
+        </div>
+
+        @if (_commandVisible)
+        {
+            <div
+                class=@($"fixed inset-0 z-50 flex items-start justify-center bg-background/70 backdrop-blur-md transition-opacity duration-200 {(_commandOpen ? "opacity-100" : "opacity-0")}")
+                @onclick="HandleCommandOverlayClick">
+                <div class=@($"mt-24 w-full max-w-[calc(100%-2rem)] sm:max-w-lg rounded-2xl border border-border bg-card text-card-foreground shadow-lg outline-none transition-all duration-200 {(_commandOpen ? "opacity-100 scale-100" : "opacity-0 scale-95")}")
+                     @onclick:stopPropagation>
+                    <WebFrontend.Components.UI.Command.Command>
+                        <CommandInput Placeholder="Type a command or search..."
+                                      AutoFocus="true"
+                                      OnKeyDown="HandleCommandKeyDown"
+                                      SearchChanged="OnCommandSearchChanged"
+                                      @ref="_commandInputComponent" />
+                        <CommandList Class="mt-1">
+                            @foreach (var cmd in GetFilteredCommands())
+                            {
+                                <CommandPaletteItem Icon="@cmd.Icon"
+                                                    Label="@cmd.Label"
+                                                    Shortcut="@cmd.Shortcut"
+                                                    OnSelect="@(() => cmd.Action())" />
+                            }
+                        </CommandList>
+                    </WebFrontend.Components.UI.Command.Command>
+                </div>
+            </div>
+        }
+    </CardContent>
+</Card>
+
+@code {
+    private bool _commandOpen;
+    private bool _commandVisible;
+    private bool _commandClosing;
+    private string _commandSearch = string.Empty;
+    private CommandInput? _commandInputComponent;
+    private CancellationTokenSource? _searchCts;
+
+    private readonly (string Icon, string Label, string? Shortcut, Action Action)[] _commandItems;
+
+    public CommandPaletteDemo()
+    {
+        _commandItems = new (string, string, string?, Action)[]
+        {
+            ("📅", "Calendar", null, () => Navigate("calendar")),
+            ("🙂", "Search Emoji", null, () => Navigate("emoji")),
+            ("⬢", "Calculator", null, () => Navigate("calculator")),
+            ("👤", "Profile", "⌘P", () => Navigate("profile")),
+            ("💳", "Billing", "⌘B", () => Navigate("billing")),
+            ("⚙️", "Settings", "⌘S", () => Navigate("settings"))
+        };
+    }
+
+    private string? _lastDestination;
+
+    private void Navigate(string destination)
+    {
+        _lastDestination = destination;
+        _ = CloseCommandPalette();
+    }
+
+    private async Task OpenCommandPalette()
+    {
+        if (_commandOpen || _commandVisible)
+            return;
+
+        _commandVisible = true;
+        _commandOpen = false;
+        await ScrollLockService.LockAsync();
+
+        await InvokeAsync(async () =>
+        {
+            StateHasChanged();
+            await Task.Yield();
+
+            _commandOpen = true;
+            StateHasChanged();
+
+            if (_commandInputComponent is not null)
+            {
+                await _commandInputComponent.FocusAsync();
+            }
+        });
+    }
+
+    private async Task CloseCommandPalette()
+    {
+        if (!_commandVisible || _commandClosing)
+            return;
+
+        _commandClosing = true;
+        _commandOpen = false;
+
+        await InvokeAsync(StateHasChanged);
+        await Task.Delay(200);
+
+        _commandVisible = false;
+        _commandClosing = false;
+
+        await ScrollLockService.UnlockAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleCommandKeyDown(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape")
+        {
+            await CloseCommandPalette();
+        }
+    }
+
+    private async Task HandleCommandOverlayClick()
+    {
+        await CloseCommandPalette();
+    }
+
+    private void OnCommandSearchChanged(string value)
+    {
+        _searchCts?.Cancel();
+        var cts = _searchCts = new CancellationTokenSource();
+
+        _ = DebounceSearchAsync(value, cts.Token);
+    }
+
+    private async Task DebounceSearchAsync(string value, CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(120, token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested)
+            return;
+
+        _commandSearch = value;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private IEnumerable<(string Icon, string Label, string? Shortcut, Action Action)> GetFilteredCommands()
+    {
+        if (string.IsNullOrWhiteSpace(_commandSearch))
+        {
+            return _commandItems;
+        }
+
+        return _commandItems.Where(c =>
+            c.Label.Contains(_commandSearch, StringComparison.OrdinalIgnoreCase));
+    }
+}
+

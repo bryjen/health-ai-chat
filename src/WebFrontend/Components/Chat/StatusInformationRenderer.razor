@@ -1,0 +1,29 @@
+@namespace WebFrontend.Components.Chat
+@using WebFrontend.Models.Chat
+@using WebFrontend.Models.Chat.StatusTypes
+@using WebFrontend.Components.Chat.StatusBubbles
+
+@switch (StatusInformation)
+{
+    case GeneralStatus general:
+        <GeneralStatusBubble Status="general" />
+        break;
+    case SymptomAddedStatus symptom:
+        <SymptomAddedBubble Status="symptom" />
+        break;
+    case SymptomGatheringStatus gathering:
+        <SymptomGatheringBubble Status="gathering" />
+        break;
+    default:
+        @* Fallback for unknown status types *@
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-200 text-zinc-900 text-xs border border-zinc-300">
+            <span class="material-symbols-outlined text-sm">info</span>
+            <span>Status update</span>
+        </div>
+        break;
+}
+
+@code {
+    [Parameter]
+    public required StatusInformation StatusInformation { get; set; }
+}

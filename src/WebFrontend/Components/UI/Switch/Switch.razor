@@ -1,0 +1,71 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Switch toggle component *@
+<button
+    type="button"
+    role="switch"
+    aria-checked="@Checked.ToString().ToLower()"
+    data-slot="switch"
+    data-size="@Size"
+    data-state="@(Checked ? "checked" : "unchecked")"
+    class="@GetClass()"
+    disabled="@Disabled"
+    @onclick="HandleClick"
+    @attributes="AdditionalAttributes">
+    <span
+        data-slot="switch-thumb"
+        class="@GetThumbClass()" />
+</button>
+
+@code {
+    [Parameter] public bool Checked { get; set; }
+    [Parameter] public EventCallback<bool> CheckedChanged { get; set; }
+    [Parameter] public string Size { get; set; } = "default";
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string GetClass()
+    {
+        var baseClasses = "peer data-[state=checked]:bg-primary data-[state=unchecked]:bg-input/80 focus-visible:border-ring focus-visible:ring-ring/50 group/switch inline-flex shrink-0 items-center rounded-full border border-transparent shadow-xs transition-colors duration-200 outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50";
+
+        var sizeClasses = Size switch
+        {
+            "sm" => "data-[size=sm]:h-3.5 data-[size=sm]:w-6",
+            "lg" => "data-[size=lg]:h-[1.35rem] data-[size=lg]:w-9",
+            _ => "data-[size=default]:h-[1.15rem] data-[size=default]:w-8"
+        };
+
+        return ClassBuilder.Merge(baseClasses, sizeClasses, Class);
+    }
+
+    private string GetThumbClass()
+    {
+        var baseClasses = "bg-background data-[state=unchecked]:bg-foreground data-[state=checked]:bg-primary-foreground pointer-events-none block rounded-full ring-0 transition-all duration-200 ease-in-out";
+
+        var translateClasses = Size switch
+        {
+            "sm" => "group-data-[state=checked]/switch:translate-x-[0.625rem] group-data-[state=unchecked]/switch:translate-x-0",
+            "lg" => "group-data-[state=checked]/switch:translate-x-[1.125rem] group-data-[state=unchecked]/switch:translate-x-0",
+            _ => "group-data-[state=checked]/switch:translate-x-[0.875rem] group-data-[state=unchecked]/switch:translate-x-0"
+        };
+
+        var sizeClasses = Size switch
+        {
+            "sm" => "group-data-[size=sm]/switch:size-3",
+            "lg" => "group-data-[size=lg]/switch:size-5",
+            _ => "group-data-[size=default]/switch:size-4"
+        };
+
+        return ClassBuilder.Merge(baseClasses, translateClasses, sizeClasses);
+    }
+
+    private async Task HandleClick()
+    {
+        if (!Disabled)
+        {
+            Checked = !Checked;
+            await CheckedChanged.InvokeAsync(Checked);
+        }
+    }
+}

@@ -1,0 +1,15 @@
+@using WebFrontend.Components.UI.Shared
+@* Table caption wrapper *@
+<caption
+    data-slot="table-caption"
+    class='@ClassBuilder.Merge("text-muted-foreground mt-4 text-sm", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</caption>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

@@ -1,0 +1,36 @@
+@using WebFrontend.Services
+@inject ToastService ToastService
+@implements IDisposable
+
+<section 
+    aria-label="Notifications" 
+    tabindex="-1" 
+    aria-live="polite" 
+    aria-relevant="additions text" 
+    aria-atomic="false"
+    class="fixed top-6 left-0 right-0 pointer-events-none z-50 flex justify-center">
+    <ol 
+        dir="ltr" 
+        tabindex="-1" 
+        class="flex flex-col gap-3.5 w-full max-w-md pointer-events-auto"
+        data-sonner-toaster="true"
+        data-sonner-theme="dark">
+        @foreach (var toast in ToastService.Toasts)
+        {
+            <ToastItem Toast="toast" OnDismiss="() => ToastService.Dismiss(toast.Id)" />
+        }
+    </ol>
+</section>
+
+@code {
+    protected override void OnInitialized()
+    {
+        ToastService.Subscribe(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ToastService.Unsubscribe(StateHasChanged);
+    }
+}
+

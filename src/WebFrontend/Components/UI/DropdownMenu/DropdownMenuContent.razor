@@ -1,0 +1,19 @@
+@namespace WebFrontend.Components.UI.DropdownMenu
+
+@* Dropdown menu content component *@
+@code {
+    public RenderFragment RenderContent() => __builder =>
+    {
+        <div
+            data-slot="dropdown-menu-content"
+            data-dropdown-menu-content="@ParentMenu?.MenuId"
+            data-state="@(ParentMenu?.Open == true ? "open" : "closed")"
+            style="position: fixed; display: none; pointer-events: none; opacity: 0; transition: opacity 200ms ease-in-out;"
+            class="@GetClass()"
+            @attributes="AdditionalAttributes">
+            <CascadingValue Value="ParentMenu" IsFixed="true">
+                @ChildContent
+            </CascadingValue>
+        </div>
+    };
+}

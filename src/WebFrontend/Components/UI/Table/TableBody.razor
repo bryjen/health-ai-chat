@@ -1,0 +1,15 @@
+@using WebFrontend.Components.UI.Shared
+@* Table body wrapper *@
+<tbody
+    data-slot="table-body"
+    class='@ClassBuilder.Merge("[&_tr:last-child]:border-0", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</tbody>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

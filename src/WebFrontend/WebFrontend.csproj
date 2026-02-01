@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+        <!-- Optimize rebuilds -->
+        <UseRidGraph>false</UseRidGraph>
+        <BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
+        <!-- Skip validation in Debug for faster builds -->
+        <BlazorWebAssemblyPreserveCollapsedWhitespace Condition="'$(Configuration)' == 'Debug'">true</BlazorWebAssemblyPreserveCollapsedWhitespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="EasyAppDev.Blazor.Icons.Lucide" Version="2.0.4" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.2" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.2" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
+        <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.0" />
+        <PackageReference Include="TwMerge" Version="1.0.7" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\WebApi.ApiWrapper\WebApi.ApiWrapper.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Services\Auth\" />
+    </ItemGroup>
+
+    <PropertyGroup>
+        <TailwindCliPath>$(MSBuildProjectDirectory)\tools\tailwindcss.exe</TailwindCliPath>
+        <TailwindCliUrl>
+            https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe</TailwindCliUrl>
+        <!-- Only build Tailwind in Release configuration -->
+        <BuildTailwind Condition="'$(Configuration)' == ''">false</BuildTailwind>
+        <BuildTailwind Condition="'$(Configuration)' == 'Debug'">false</BuildTailwind>
+        <BuildTailwind Condition="'$(Configuration)' == 'Release'">true</BuildTailwind>
+    </PropertyGroup>
+
+    <!-- Download Tailwind CLI only if needed and in Release -->
+    <Target Name="DownloadTailwindCli" BeforeTargets="BuildTailwind" Condition="'$(BuildTailwind)' == 'true' AND !Exists('$(TailwindCliPath)')">
+        <MakeDir Directories="$(MSBuildProjectDirectory)\tools" />
+        <Message Text="Downloading Tailwind CSS Standalone CLI..." Importance="high" />
+        <Exec Command="powershell -Command &quot;Invoke-WebRequest -Uri '$(TailwindCliUrl)' -OutFile '$(TailwindCliPath)'&quot;" ContinueOnError="false" />
+    </Target>
+
+    <!-- Build Tailwind only in Release configuration with incremental build support -->
+    <Target Name="BuildTailwind" BeforeTargets="Build" Condition="'$(BuildTailwind)' == 'true' AND Exists('$(TailwindCliPath)')" Inputs="wwwroot/css/input.css;tailwind.config.js" Outputs="wwwroot/css/app.css">
+        <Message Text="Building Tailwind CSS (Production)..." Importance="normal" />
+        <Exec Command="&quot;$(TailwindCliPath)&quot; -i ./wwwroot/css/input.css -o ./wwwroot/css/app.css --minify" ContinueOnError="false" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    </Target>
+
+</Project>

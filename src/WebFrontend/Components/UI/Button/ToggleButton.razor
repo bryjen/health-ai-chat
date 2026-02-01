@@ -1,0 +1,17 @@
+@namespace WebFrontend.Components.UI.Button
+@using Microsoft.AspNetCore.Components.Web
+
+<Button
+    Variant="@CurrentVariant"
+    Size="@Size"
+    Disabled="@Disabled"
+    Type="@Type"
+    Class="@CurrentClass"
+    @onclick="HandleClick"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</Button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

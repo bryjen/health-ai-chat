@@ -1,0 +1,18 @@
+@using WebFrontend.Components.UI.Combobox
+@using WebFrontend.Components.UI.Label
+@namespace WebFrontend.Components.Core.Location
+
+<div class="space-y-1">
+    @if (ShowLabel)
+    {
+        <Label>@LabelText</Label>
+    }
+    <Combobox
+        Value="@EffectiveValue"
+        ValueChanged="@OnValueChanged"
+        Placeholder="@Placeholder"
+        Options="@EffectiveOptions"
+        Disabled="@Disabled"
+        OuterClass="@OuterClass"
+        Class="@Class" />
+</div>

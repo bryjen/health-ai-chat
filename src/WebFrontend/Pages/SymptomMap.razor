@@ -1,0 +1,211 @@
+@page "/symptom-map"
+@layout EmptyLayout
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@inherits ComponentBase
+
+<PageTitle>Symptom Correlation Map</PageTitle>
+
+<div class="text-white min-h-screen flex flex-col overflow-hidden" style="background-color: #000000;">
+    @* Header *@
+    <header class="flex items-center justify-between px-4 py-2 z-50" style="background-color: #0b0b0b; border-bottom: 1px solid #1f1f1f;">
+        <div class="flex items-center gap-2">
+            <h1 class="text-sm font-semibold tracking-tight">
+                <span class="text-white">WebFrontend</span>
+                <span class="ml-1 font-normal" style="color: #8e8e8e;">miguelbryancarlo3434@gmail.com</span>
+            </h1>
+        </div>
+        <div class="flex items-center gap-6">
+            <nav class="hidden md:flex items-center gap-6 text-xs" style="color: #8e8e8e;">
+                <a class="hover:text-white transition-colors" href="#">Live Analysis</a>
+                <a class="hover:text-white transition-colors" href="#">Patient History</a>
+                <a class="hover:text-white transition-colors" href="#">About</a>
+            </nav>
+            <div class="flex items-center gap-3">
+                <button style="color: #8e8e8e;" class="hover:text-white">
+                    <span class="material-symbols-outlined text-xl">settings</span>
+                </button>
+                <div class="size-7 rounded-full flex items-center justify-center text-[10px] font-bold" style="background-color: #3d4b63;">AI</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex flex-1 overflow-hidden">
+        @* Left Sidebar *@
+        <aside class="w-64 flex flex-col border-r" style="background-color: #111111; border-color: #1f1f1f;">
+            <div class="p-3">
+                <button class="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-all mb-6 hover:bg-white/5" style="border: 1px solid #1f1f1f; color: #d1d1d1;">
+                    <span class="material-symbols-outlined text-lg">add</span>
+                    New Chat
+                </button>
+                <div class="px-2 mb-2">
+                    <h3 class="text-[10px] font-bold uppercase tracking-wider mb-3" style="color: #8e8e8e;">Recent Chats</h3>
+                    <div class="relative mb-4">
+                        <input
+                            class="w-full rounded px-8 py-1.5 text-xs focus:ring-0 focus:outline-none"
+                            style="background-color: #0b0b0b; border: 1px solid #1f1f1f; color: #d1d1d1;"
+                            placeholder="Search chats..."
+                            type="text"/>
+                        <span class="material-symbols-outlined absolute left-2 top-1.5 text-base" style="color: #8e8e8e;">search</span>
+                    </div>
+                </div>
+            </div>
+
+            @* Scrollable Sidebar Content *@
+            <div class="flex-1 overflow-y-auto sidebar-scroll px-3 space-y-1">
+                @* Active Analysis Card *@
+                <div class="p-3 rounded-md mb-4" style="background-color: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-[10px] font-bold uppercase tracking-widest" style="color: #5288ed;">Active Analysis</span>
+                        <span class="text-[10px]" style="color: #8e8e8e;">92% Match</span>
+                    </div>
+                    <p class="text-sm font-medium text-white">Johnathan Doe</p>
+                    <p class="text-[10px]" style="color: #8e8e8e;">ID: 98231-A • 34Y M</p>
+                </div>
+
+                <h4 class="px-3 py-2 text-[10px] font-bold uppercase tracking-wider" style="color: #8e8e8e;">Active Episodes</h4>
+
+                @if (IsLoading)
+                {
+                    <div class="px-3 py-2 text-xs" style="color: #8e8e8e;">Loading...</div>
+                }
+                else if (ErrorMessage != null)
+                {
+                    <div class="px-3 py-2 text-xs text-red-500">@ErrorMessage</div>
+                }
+                else if (!DetectedSymptoms.Any())
+                {
+                    <div class="px-3 py-2 text-xs" style="color: #8e8e8e;">No active episodes</div>
+                }
+                else
+                {
+                    @foreach (var symptom in DetectedSymptoms)
+                    {
+                        <div class="group flex items-center gap-3 px-3 py-2.5 rounded-md cursor-pointer transition-colors hover:bg-white/5" style="color: #d1d1d1;">
+                            <span class="material-symbols-outlined text-lg" style="color: @symptom.IconColor;">@symptom.Icon</span>
+                            <div class="flex-1 overflow-hidden">
+                                <p class="text-xs font-medium truncate">@symptom.Name</p>
+                                <p class="text-[10px] truncate" style="color: #8e8e8e;">@symptom.Details</p>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            @* Sidebar Footer *@
+            <div class="mt-auto p-4 border-t" style="border-color: #1f1f1f;">
+                <div class="flex items-center gap-3 mb-2">
+                    <div class="size-2 rounded-full bg-green-500"></div>
+                    <span class="text-xs truncate" style="color: #d1d1d1;">miguelbryancarlo3434@gmail.com</span>
+                </div>
+                <button class="text-[10px] hover:text-white flex items-center gap-1 transition-colors" style="color: #8e8e8e;">
+                    Logout
+                </button>
+            </div>
+        </aside>
+
+        @* Main Content Area - Correlation Map *@
+        <section class="flex-1 flex flex-col relative" style="background-color: #000000;">
+            @* Title Card (Top Left) *@
+            <div class="absolute top-8 left-8 z-10">
+                <div class="p-5 rounded-lg border shadow-2xl backdrop-blur-xl" style="background-color: rgba(17, 17, 17, 0.6); border-color: #1f1f1f;">
+                    <h2 class="text-xl font-medium tracking-tight text-white mb-1">Correlation Map</h2>
+                    <p class="text-[11px] font-light" style="color: #8e8e8e;">Real-time symptom inference active</p>
+                </div>
+            </div>
+
+            @* Central Graph Visualization *@
+            <div class="flex-1 relative overflow-hidden flex items-center justify-center">
+                @* Cluster Rings *@
+                <div class="absolute w-[400px] h-[400px] rounded-full neon-ring flex items-center justify-center -translate-x-32 -translate-y-8">
+                    <div class="absolute top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.5em] whitespace-nowrap" style="color: rgba(82, 136, 237, 0.6);">Influenza Complex</div>
+                </div>
+                <div class="absolute w-[320px] h-[320px] rounded-full neon-ring-white flex items-center justify-center translate-x-40 translate-y-32">
+                    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.5em] whitespace-nowrap" style="color: rgba(255, 255, 255, 0.3);">Upper Respiratory</div>
+                </div>
+
+                @* Connecting Lines SVG *@
+                <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-40">
+                    <line stroke="#5288ed" stroke-width="0.5" x1="45%" x2="52%" y1="45%" y2="48%"></line>
+                    <line stroke="#5288ed" stroke-width="1.5" x1="45%" x2="40%" y1="45%" y2="35%"></line>
+                    <line stroke="#5288ed" stroke-width="0.5" x1="45%" x2="48%" y1="45%" y2="30%"></line>
+                    <line stroke="#ffffff" stroke-width="0.5" x1="55%" x2="62%" y1="55%" y2="58%"></line>
+                    <line stroke="#8e8e8e" stroke-dasharray="2" stroke-width="0.5" x1="55%" x2="52%" y1="55%" y2="48%"></line>
+                </svg>
+
+                @* Symptom Nodes *@
+                @foreach (var node in SymptomNodes)
+                {
+                    <div class="graph-node absolute cursor-pointer group z-20" style="left: @node.Left%; top: @node.Top%;">
+                        <div class="@node.SizeClass rounded-full flex items-center justify-center relative @node.GlowClass @node.HoverClass" style="@node.Style">
+                            <span class="material-symbols-outlined @node.IconSizeClass" style="@node.IconColor">@node.Icon</span>
+                        </div>
+                        @if (!string.IsNullOrEmpty(node.Label))
+                        {
+                            <div class="absolute top-full mt-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-white px-2 py-1 rounded border" style="background-color: rgba(17, 17, 17, 0.8); border-color: rgba(255, 255, 255, 0.1);">
+                                @node.Label
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(node.Tooltip))
+                        {
+                            <div class="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-56 p-4 rounded-xl shadow-2xl border hidden group-hover:block transition-all" style="background-color: #111111; border-color: #1f1f1f;">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <div class="size-2 rounded-full animate-pulse" style="background-color: #5288ed;"></div>
+                                    <p class="text-[10px] font-bold uppercase tracking-wider" style="color: #5288ed;">Critical Cluster</p>
+                                </div>
+                                <p class="text-xs leading-relaxed" style="color: #d1d1d1;">@node.Tooltip</p>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            @* Diagnostic Inference Card (Bottom Left) *@
+            <div class="absolute bottom-10 left-10 max-w-xs w-full">
+                <div class="p-5 rounded-xl border shadow-2xl backdrop-blur-xl" style="background-color: rgba(17, 17, 17, 0.8); border-color: #1f1f1f;">
+                    <div class="flex items-center gap-2 mb-4">
+                        <span class="material-symbols-outlined text-sm" style="color: #5288ed;">analytics</span>
+                        <h4 class="text-[11px] font-bold text-white uppercase tracking-widest">Diagnostic Inference</h4>
+                    </div>
+                    <div class="space-y-4">
+                        @if (DiagnosticInferences.Any())
+                        {
+                            @foreach (var inference in DiagnosticInferences)
+                            {
+                                <div class="space-y-1.5">
+                                    <div class="flex justify-between text-[10px]">
+                                        <span style="color: #d1d1d1;">@inference.Name</span>
+                                        <span class="font-bold" style="color: @inference.PercentageColor;">@inference.Percentage%</span>
+                                    </div>
+                                    <div class="h-1 rounded-full overflow-hidden" style="background-color: #0b0b0b;">
+                                        <div class="h-full" style="width: @inference.Percentage%; background-color: @inference.BarColor;"></div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-[10px]" style="color: #8e8e8e;">No assessments yet</div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Zoom and Send Controls (Bottom Right) *@
+            <div class="absolute bottom-10 right-10 flex flex-col gap-4">
+                <div class="flex flex-col border rounded overflow-hidden backdrop-blur-xl" style="background-color: rgba(17, 17, 17, 0.8); border-color: #1f1f1f;">
+                    <button class="p-2.5 hover:bg-white/5 transition-colors" style="color: #8e8e8e;">
+                        <span class="material-symbols-outlined text-lg">add</span>
+                    </button>
+                    <div class="h-[1px]" style="background-color: #1f1f1f;"></div>
+                    <button class="p-2.5 hover:bg-white/5 transition-colors" style="color: #8e8e8e;">
+                        <span class="material-symbols-outlined text-lg">remove</span>
+                    </button>
+                </div>
+                <button class="size-11 rounded text-white flex items-center justify-center hover:opacity-90 shadow-lg transition-all" style="background-color: #5288ed; box-shadow: 0 10px 15px -3px rgba(82, 136, 237, 0.2);">
+                    <span class="material-symbols-outlined">send</span>
+                </button>
+            </div>
+        </section>
+    </main>
+</div>
+

@@ -1,0 +1,150 @@
+@using WebFrontend.Services.Auth
+
+@Render
+
+@code {
+    [Inject] private AuthService AuthService { get; set; } = null!;
+
+    private RenderFragment Render => __builder =>
+    {
+        <div class="min-h-14 bg-card border-b border-border">
+            <div class="w-full px-4 py-3 flex items-center justify-between">
+                <a class="text-lg font-semibold text-foreground" href="/chat">WebFrontend</a>
+            </div>
+        </div>
+
+        <div class="md:h-[calc(100vh-3.5rem)] md:overflow-y-auto flex flex-col">
+            <AuthorizeView>
+                <Authorized>
+                    @RenderUserInfo
+                    @RenderNavigation
+                </Authorized>
+                <NotAuthorized>
+                    <div class="p-4 text-sm text-muted-foreground">
+                        Please log in to access settings.
+                    </div>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    };
+
+    private RenderFragment RenderUserInfo => __builder =>
+    {
+        <div class="p-4 border-b border-border">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
+                                @GetUserInitials(context)
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-foreground truncate">
+                                    @GetDisplayName(context)
+                                </div>
+                                <div class="text-xs text-muted-foreground truncate">
+                                    @GetUserEmail(context)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    };
+
+    private RenderFragment RenderNavigation => __builder =>
+    {
+        <nav class="flex-1 p-4 space-y-1">
+            <NavLink href="/settings/personal-information" class="nav-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors" Match="NavLinkMatch.Prefix">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>Profile</span>
+            </NavLink>
+
+            <NavLink href="/settings/security" class="nav-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors" Match="NavLinkMatch.Prefix">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>Security</span>
+            </NavLink>
+
+            <NavLink href="/settings/notifications" class="nav-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors" Match="NavLinkMatch.Prefix">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0113 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span>Notifications</span>
+            </NavLink>
+
+            <NavLink href="/settings/billing" class="nav-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors" Match="NavLinkMatch.Prefix">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+                <span>Billing</span>
+            </NavLink>
+
+            <NavLink href="/settings/integrations" class="nav-link flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors" Match="NavLinkMatch.Prefix">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Integrations</span>
+            </NavLink>
+        </nav>
+    };
+
+    private string GetUserInitials(AuthenticationState authState)
+    {
+        var user = AuthService.CurrentUser;
+        if (user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            var email = user.Email;
+            var parts = email.Split('@');
+            if (parts.Length > 0 && parts[0].Length > 0)
+            {
+                return parts[0].Substring(0, 1).ToUpperInvariant();
+            }
+        }
+
+        var emailClaim = authState.User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(emailClaim))
+        {
+            var parts = emailClaim.Split('@');
+            if (parts.Length > 0 && parts[0].Length > 0)
+            {
+                return parts[0].Substring(0, 1).ToUpperInvariant();
+            }
+        }
+
+        return "U";
+    }
+
+    private string GetDisplayName(AuthenticationState authState)
+    {
+        var user = AuthService.CurrentUser;
+        if (user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            var email = user.Email;
+            var parts = email.Split('@');
+            if (parts.Length > 0)
+            {
+                return parts[0];
+            }
+        }
+
+        return authState.User?.Identity?.Name ?? "User";
+    }
+
+    private string GetUserEmail(AuthenticationState authState)
+    {
+        var user = AuthService.CurrentUser;
+        if (user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            return user.Email;
+        }
+
+        return authState.User?.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
+    }
+}
+

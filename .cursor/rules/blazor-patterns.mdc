@@ -1,0 +1,203 @@
+---
+description: Blazor component development patterns and conventions
+globs: **/*.razor
+alwaysApply: false
+---
+
+# Blazor Development Patterns
+
+## Comments
+
+**Always use Razor comment syntax, never HTML comments:**
+
+```razor
+@* ✅ GOOD: Razor comment *@
+@* This is a comment in Blazor *@
+
+<!-- ❌ BAD: HTML comment (not processed by Razor) -->
+<!-- This won't work correctly in Blazor -->
+```
+
+**Why:** HTML comments (`<!-- -->`) are rendered to the client and can expose code structure. Razor comments (`@* *@`) are server-side only and removed before rendering.
+
+## Component Rendering
+
+**Use `RenderFragment` with `__builder =>` pattern instead of raw HTML in `.razor` files:**
+
+```razor
+@* ✅ GOOD: Using RenderFragment *@
+@code {
+    private RenderFragment RenderHeader => __builder =>
+    {
+        __builder.OpenElement(0, "div");
+        __builder.AddAttribute(1, "class", "header");
+        __builder.AddContent(2, "Welcome");
+        __builder.CloseElement();
+    };
+}
+
+@RenderHeader
+
+@* ❌ BAD: Raw HTML in .razor file *@
+<div class="header">Welcome</div>
+```
+
+**When to use:**
+- For reusable component sections
+- When you need dynamic rendering logic
+- For complex conditional rendering
+- When building components programmatically
+
+**When raw HTML is acceptable:**
+- Simple static markup
+- Layout structures
+- Basic page content without complex logic
+
+## Code-Behind Pattern
+
+**Prefer backing classes (`.razor.cs`) when logic is required:**
+
+```razor
+@* ✅ GOOD: Component.razor *@
+@page "/example"
+@inherits ComponentBase
+
+<h3>@Title</h3>
+<button @onclick="HandleClick">Click me</button>
+
+@* ✅ GOOD: Component.razor.cs *@
+namespace WebFrontend.Pages;
+
+public partial class Component : ComponentBase
+{
+    private string Title { get; set; } = "Example";
+    
+    private void HandleClick()
+    {
+        Title = "Clicked!";
+    }
+}
+```
+
+```razor
+@* ❌ BAD: All logic in @code block *@
+@page "/example"
+
+<h3>@Title</h3>
+<button @onclick="HandleClick">Click me</button>
+
+@code {
+    private string Title { get; set; } = "Example";
+    
+    private void HandleClick()
+    {
+        Title = "Clicked!";
+    }
+}
+```
+
+AGAIN THIS IS ONLY ON .razor FILES, NOT ON BACKING FILES .razor.cs
+FOR BACKING FILES (NORMAL) USE THE DEFAULT COMMENTS `//`
+
+**Use `.razor.cs` when:**
+- Component has more than 20-30 lines of logic
+- Logic needs to be testable
+- Multiple methods or properties are needed
+- Component needs dependency injection
+- Logic is complex enough to benefit from separation
+
+**Use `@code` block when:**
+- Simple state management (1-2 properties)
+- Single event handler
+- Minimal logic (< 10 lines)
+
+## Component Structure
+
+**Preferred structure for components with logic:**
+
+```
+Component.razor          → Markup and rendering
+Component.razor.cs       → Logic, state, event handlers
+Component.razor.css      → Scoped styles (optional)
+```
+
+## Examples
+
+### Simple Component (raw HTML acceptable)
+```razor
+@* Simple static component - raw HTML is fine *@
+<div class="card">
+    <h2>Welcome</h2>
+    <p>This is a simple component.</p>
+</div>
+```
+
+### Component with Logic (use .razor.cs)
+```razor
+@* Component.razor *@
+@page "/users"
+@inherits ComponentBase
+
+<h3>Users</h3>
+@if (users != null)
+{
+    <ul>
+        @foreach (var user in users)
+        {
+            <li>@user.Name</li>
+        }
+    </ul>
+}
+else
+{
+    <p>Loading...</p>
+}
+```
+
+```csharp
+// Component.razor.cs
+namespace WebFrontend.Pages;
+
+public partial class Users : ComponentBase
+{
+    private List<User>? users;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        users = await LoadUsersAsync();
+    }
+    
+    private async Task<List<User>> LoadUsersAsync()
+    {
+        // Load logic here
+        return new List<User>();
+    }
+}
+```
+
+### Component with RenderFragment
+```razor
+@* Component.razor *@
+@page "/dashboard"
+
+@RenderDashboardHeader
+@RenderDashboardContent
+
+@code {
+    private RenderFragment RenderDashboardHeader => __builder =>
+    {
+        __builder.OpenElement(0, "header");
+        __builder.AddAttribute(1, "class", "dashboard-header");
+        __builder.AddMarkupContent(2, "<h1>Dashboard</h1>");
+        __builder.CloseElement();
+    };
+    
+    private RenderFragment RenderDashboardContent => __builder =>
+    {
+        __builder.OpenElement(0, "main");
+        __builder.AddAttribute(1, "class", "dashboard-content");
+        // Complex rendering logic here
+        __builder.CloseElement();
+    };
+}
+```

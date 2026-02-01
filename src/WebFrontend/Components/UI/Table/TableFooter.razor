@@ -1,0 +1,15 @@
+@using WebFrontend.Components.UI.Shared
+@* Table footer wrapper *@
+<tfoot
+    data-slot="table-footer"
+    class='@ClassBuilder.Merge("bg-muted/50 border-t font-medium [&>tr]:last:border-b-0", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</tfoot>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

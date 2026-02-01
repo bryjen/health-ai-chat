@@ -1,0 +1,188 @@
+
+@Render
+
+@* ReSharper disable once UnusedParameter.Local *@
+@code {
+    private RenderFragment Render => __builder =>
+    {
+        <div class="min-h-14 bg-card border-b border-border">
+            <div class="w-full px-4 flex items-center justify-between">
+                <a class="text-lg font-semibold text-foreground" href="">WebFrontend</a>
+            </div>
+        </div>
+
+        <div class="md:h-[calc(100vh-3.5rem)] md:overflow-y-auto flex flex-col" @onclick="ToggleNavMenu">
+            <AuthorizeView>
+                <Authorized>
+                    @RenderAuthorizedPanel
+                </Authorized>
+            </AuthorizeView>
+
+            @RenderFooter
+        </div>
+    };
+
+    private RenderFragment RenderNavLink(
+        string href,
+        string displayName,
+        RenderFragment icon)
+        => __builder =>
+    {
+        <div class="px-3 py-1">
+            <NavLink
+                href="@href"
+                class="flex items-center w-full px-4 py-2.5 transition-all duration-200 ease-in-out bg-card hover:brightness-150 text-foreground rounded-md font-medium gap-2 no-underline">
+                @icon
+                <span class="text-sm">@displayName</span>
+            </NavLink>
+        </div>
+    };
+
+    private RenderFragment RenderAuthorizedPanel => __builder =>
+    {
+        <div class="flex flex-col flex-1 overflow-hidden mt-6">
+            @RenderNavLink(
+                href: "/dashboard",
+                displayName: "Dashboard",
+                icon: @<LuLayoutDashboard class="w-[1rem] h-[1rem]"/>)
+
+            @RenderNavLink(
+                href: "/symptom-map",
+                displayName: "Symptom Map",
+                icon: @<LuWaypoints class="w-[1rem] h-[1rem]"/>)
+
+            @* button for new chat *@
+            <div class="px-3 py-1">
+                <button
+                    @onclick="StartNewChat"
+                    class="flex items-center w-full px-4 py-2.5 transition-all duration-200 ease-in-out bg-card hover:brightness-150 text-foreground rounded-md font-medium gap-2 no-underline cursor-pointer">
+                    <LuPlus class="w-[1rem] h-[1rem]"/>
+                    <span class="text-sm">New Chat</span>
+                </button>
+            </div>
+
+            @* recent chats section *@
+            <div class="flex flex-col flex-1 overflow-hidden">
+                <div class="px-3 pt-4 pb-2">
+                    <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">RECENT CHATS</h2>
+                </div>
+
+                @* search bar *@
+                <div class="px-3 pb-3">
+                    <div class="relative">
+                        <input
+                            type="text"
+                            @bind="SearchQuery"
+                            @bind:event="oninput"
+                            placeholder="Search chats..."
+                            class="w-full px-3 py-2 pr-10 text-sm bg-muted border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"/>
+                        <svg class="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                </div>
+
+                @RenderConversationsPanel
+            </div>
+        </div>
+    };
+
+    /// <remarks>
+    /// Requires authenticated user. See caller above.
+    /// </remarks>
+    private RenderFragment RenderConversationsPanel => __builder =>
+    {
+        <div class="flex-1 overflow-y-auto px-3 pb-3">
+            @if (IsLoadingConversations)
+            {
+                <div class="text-center py-8 text-sm text-muted-foreground">Loading...</div>
+            }
+            else if (FilteredConversations.Count == 0)
+            {
+                <div class="text-center py-8 text-sm text-muted-foreground">
+                    @(string.IsNullOrWhiteSpace(SearchQuery) ? "No conversations yet" : "No conversations found")
+                </div>
+            }
+            else
+            {
+                @foreach (var conversation in FilteredConversations)
+                {
+                    <div class="relative group/item mb-1 rounded-md hover:bg-accent transition-colors">
+                        <NavLink
+                            href="@($"/chat?conversation={conversation.Id}")"
+                            class="flex items-start gap-3 p-2">
+                            <svg class="w-5 h-5 text-muted-foreground mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M2.678 11.894a1 1 0 0 1 .287.801 10.97 10.97 0 0 1-.398 2c1.395-.323 2.247-.697 2.634-.893a1 1 0 0 1 .71-.074A8.06 8.06 0 0 0 8 14c3.996 0 7-2.807 7-6 0-3.192-3.004-6-7-6S1 4.808 1 8c0 1.468.617 2.83 1.678 3.894zm-.493 3.905a21.682 21.682 0 0 1-.713.129c-.2.032-.352-.176-.273-.362a9.68 9.68 0 0 0 .244-.637l.003-.01c.248-.72.45-1.548.524-2.319C.743 11.37 0 9.76 0 8c0-3.866 3.582-7 8-7s8 3.134 8 7-3.582 7-8 7a9.06 9.06 0 0 1-2.347-.306c-.52.263-1.639.742-3.468 1.105z"/>
+                            </svg>
+                            <div class="flex-1 min-w-0 max-w-[80%]">
+                                <div class="text-sm font-medium text-foreground truncate">
+                                    @conversation.Title
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(conversation.LastMessagePreview))
+                                {
+                                    <div class="text-xs text-muted-foreground truncate mt-0.5">
+                                        @conversation.LastMessagePreview
+                                    </div>
+                                }
+                            </div>
+                        </NavLink>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger>
+                                <button
+                                    @onclick:preventDefault="true"
+                                    class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md opacity-0 group-hover/item:opacity-100 hover:opacity-100 hover:bg-muted transition-opacity z-10"
+                                    title="More options">
+                                    <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                    </svg>
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent Side="bottom" Align="end" Class="w-48 mt-1 bg-card border border-border rounded-md shadow-lg z-50">
+                                <DropdownMenuItem Disabled>
+                                    Star
+                                </DropdownMenuItem>
+                                <DropdownMenuItem Disabled>
+                                    Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuItem Disabled>
+                                    Add to project
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem Variant="destructive" OnClick="() => HandleDeleteConversation(conversation.Id)">
+                                    Delete
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                }
+            }
+        </div>
+    };
+
+    private RenderFragment RenderFooter => __builder =>
+    {
+        <div class="border-t border-border p-2 mt-auto">
+            <UserNav />
+        </div>
+    };
+
+    private RenderFragment RenderConversationDropdown(Guid conversationId) => __builder =>
+    {
+        <DropdownMenuContent Side="bottom" Align="end" Class="w-48 mt-1 bg-card border border-border rounded-md shadow-lg z-50">
+            <DropdownMenuItem Disabled>
+                Star
+            </DropdownMenuItem>
+            <DropdownMenuItem Disabled>
+                Rename
+            </DropdownMenuItem>
+            <DropdownMenuItem Disabled>
+                Add to project
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem Variant="destructive" OnClick="() => HandleDeleteConversation(conversationId)">
+                Delete
+            </DropdownMenuItem>
+        </DropdownMenuContent>
+    };
+}

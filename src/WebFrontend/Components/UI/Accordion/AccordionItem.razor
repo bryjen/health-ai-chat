@@ -1,0 +1,37 @@
+@using WebFrontend.Components.UI.Shared
+@using WebFrontend.Components.UI.Accordion
+
+@* Single accordion item with local open state that can be controlled or uncontrolled *@
+<CascadingValue Value="_context">
+    <div
+        data-slot="accordion-item"
+        class='@ClassBuilder.Merge("", Class)'
+        @attributes="AdditionalAttributes">
+        @ChildContent
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback<bool> OpenChanged { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private AccordionItemContext _context = default!;
+
+    protected override void OnParametersSet()
+    {
+        _context ??= new AccordionItemContext(Open, SetOpenFromContext);
+        _context.Open = Open;
+    }
+
+    private void SetOpenFromContext(bool value)
+    {
+        if (Open == value) return;
+        Open = value;
+        OpenChanged.InvokeAsync(value);
+        StateHasChanged();
+    }
+}
+

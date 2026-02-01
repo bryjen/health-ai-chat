@@ -1,0 +1,44 @@
+@using System.Collections.Generic
+@namespace WebFrontend.Components.UI.Tooltip
+
+@* Tooltip trigger component - supplies tooltip-specific attributes to its child *@
+@ChildContent?.Invoke(GetContext())
+
+@code {
+    [CascadingParameter] public Tooltip? ParentTooltip { get; set; }
+    [Parameter] public RenderFragment<TooltipTriggerContext>? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object?>? AdditionalAttributes { get; set; }
+
+    private TooltipTriggerContext GetContext()
+    {
+        var tooltipId = ParentTooltip?.TooltipId;
+        var contentId = tooltipId is not null ? $"tooltip-content-{tooltipId}" : null;
+
+        var attributes = new Dictionary<string, object?>(System.StringComparer.OrdinalIgnoreCase);
+
+        if (AdditionalAttributes != null)
+        {
+            foreach (var attribute in AdditionalAttributes)
+            {
+                if (attribute.Key == null)
+                {
+                    continue;
+                }
+
+                attributes[attribute.Key] = attribute.Value;
+            }
+        }
+
+        if (tooltipId != null)
+        {
+            attributes["data-tooltip-trigger"] = tooltipId;
+        }
+
+        if (contentId != null)
+        {
+            attributes["aria-describedby"] = contentId;
+        }
+
+        return new TooltipTriggerContext(attributes, tooltipId, contentId);
+    }
+}

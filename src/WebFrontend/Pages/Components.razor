@@ -1,0 +1,742 @@
+@page "/components"
+
+@using System.Diagnostics.CodeAnalysis
+@using WebFrontend.Components.UI.Table
+@using WebFrontend.Components.UI.Accordion
+@using WebFrontend.Components.UI.Tabs
+@using WebFrontend.Components.UI.Select
+@using WebFrontend.Components.UI.Textarea
+@using WebFrontend.Components.UI.Calendar
+@using WebFrontend.Components.UI.Progress
+@using WebFrontend.Components.UI.Skeleton
+@using WebFrontend.Components.UI.Sheet
+@using WebFrontend.Components.UI.Command
+@using WebFrontend.Components.UI.Popover
+@using WebFrontend.Components.Core.Location
+@using WebFrontend.Services
+
+@layout EmptyLayout
+
+@Render
+
+@code {
+    private RenderFragment Render => __builder =>
+    {
+        <PageTitle>Component Showcase</PageTitle>
+
+        <div class="min-h-screen bg-background p-8">
+            <div class="mx-auto space-y-10">
+
+                <div class="flex flex-col items-center gap-2">
+                    <h1 class="!text-5xl font-bold text-foreground">
+                        Blazor shadcn components
+                    </h1>
+                    <p class="text-center text-foreground">
+                        <span>"A set of beautifully designed components that you can customize, extend, and build on. Start here then make it your own. Open Source. Open Code."</span>
+                        <br/>
+                        <span>Now in Blazor!</span>
+                    </p>
+                </div>
+
+                <div class="flex flex-col space-y-12">
+                    @RenderSection1
+                    @RenderSection2
+                </div>
+
+                <div class="mt-30">
+                    scroll bait
+                </div>
+            </div>
+        </div>
+    };
+
+    private RenderFragment RenderSection1 => __builder =>
+    {
+        <div class="flex flex-col gap-2 mt-12 mb-8">
+            <p class="text-foreground">
+                Essential components. The building blocks of more advanced ones.
+            </p>
+            <p class="text-xs text-muted-foreground">
+                badge, button, card, input, label, separator, alert, avatar, switch, checkbox, dialog/modal, dropdown, tooltip.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            @* Column 1: Environment & Status *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Scroll Lock</CardTitle>
+                        <CardDescription>Toggle page scrolling using JavaScript interop.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex items-center justify-between gap-3">
+                            <Button Variant="outline" @onclick="ToggleScroll">
+                                @(_scrollLocked ? "Enable Scrolling" : "Disable Scrolling")
+                            </Button>
+                            <span class="text-xs md:text-sm text-muted-foreground">
+                                Current: @(_scrollLocked ? "Locked" : "Unlocked")
+                            </span>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Alerts</CardTitle>
+                        <CardDescription>Callouts for user attention.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-4">
+                            <Alert Variant="default">
+                                <AlertTitle>Heads up!</AlertTitle>
+                                <AlertDescription>
+                                    You can add components to your app using the cli.
+                                </AlertDescription>
+                            </Alert>
+                            <Alert Variant="destructive">
+                                <AlertTitle>Error</AlertTitle>
+                                <AlertDescription>
+                                    Your session has expired. Please log in again.
+                                </AlertDescription>
+                            </Alert>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Badges</CardTitle>
+                        <CardDescription>Status and metadata chips.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex flex-wrap gap-2">
+                            <Badge Variant="default">Default</Badge>
+                            <Badge Variant="secondary">Secondary</Badge>
+                            <Badge Variant="destructive">Destructive</Badge>
+                            <Badge Variant="outline">Outline</Badge>
+                            <Badge Variant="ghost">Ghost</Badge>
+                            <Badge Variant="link">Link</Badge>
+                        </div>
+                        <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span class="mr-1">Sizes:</span>
+                            <Badge Size="sm" Variant="secondary">Small</Badge>
+                            <Badge Variant="secondary">Default</Badge>
+                            <Badge Size="lg" Variant="secondary">Large</Badge>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            @* Column 2: Actions *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Buttons</CardTitle>
+                        <CardDescription>Primary, secondary, and utility actions.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <Button Variant="default">Default</Button>
+                            <Button Variant="secondary">Secondary</Button>
+                            <Button Variant="destructive">Destructive</Button>
+                            <Button Variant="outline">Outline</Button>
+                            <Button Variant="ghost">Ghost</Button>
+                            <Button Variant="link">Link</Button>
+                        </div>
+                        <Separator class="my-4" />
+                        <div class="flex flex-wrap gap-2 items-center">
+                            <Button Size="xs">Extra Small</Button>
+                            <Button Size="sm">Small</Button>
+                            <Button Size="default">Default</Button>
+                            <Button Size="lg">Large</Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Dropdown Menu</CardTitle>
+                        <CardDescription>Contextual menu for account actions.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <DropdownMenu Open="_dropdownOpen" OpenChanged="OnDropdownOpenChanged">
+                            <DropdownMenuTrigger>
+                                <Button Variant="outline">Open Menu</Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem>Profile</DropdownMenuItem>
+                                <DropdownMenuItem>Settings</DropdownMenuItem>
+                                <DropdownMenuItem>Team</DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem Variant="destructive">Logout</DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Tooltip</CardTitle>
+                        <CardDescription>Inline hints and affordances.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Tooltip>
+                            <TooltipTrigger Context="ctx">
+                                <Button Variant="outline" @attributes="ctx.Attributes">Hover me</Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>This is a tooltip</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </CardContent>
+                </Card>
+            </div>
+
+            @* Column 3: Forms & Toggles *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Inputs</CardTitle>
+                        <CardDescription>Form fields with labels and helpers.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-4">
+                            <div>
+                                <Label For="email">Email</Label>
+                                <Input type="email" id="email" placeholder="Enter your email" class="mt-2" />
+                            </div>
+                            <div>
+                                <Label For="password">Password</Label>
+                                <Input type="password" id="password" placeholder="Enter your password" class="mt-2" />
+                            </div>
+                        </div>
+                        <div class="mt-4 space-y-2">
+                            <p class="text-xs text-muted-foreground">Size variants</p>
+                            <div class="space-y-2">
+                                <Input Size="sm" placeholder="Small input" />
+                                <Input placeholder="Default input" />
+                                <Input Size="lg" placeholder="Large input" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Switches</CardTitle>
+                        <CardDescription>Quick binary toggles.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex flex-col gap-4">
+                            <div class="flex items-center gap-2">
+                                <Switch Size="sm" Checked="_switchChecked" CheckedChanged="OnSwitchCheckedChanged" />
+                                <Label>Small switch</Label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Switch Checked="_switchChecked2" CheckedChanged="OnSwitch2CheckedChanged" />
+                                <Label>Default switch</Label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Switch Size="lg" Checked="_switchChecked3" CheckedChanged="OnSwitch3CheckedChanged" />
+                                <Label>Large switch</Label>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Checkboxes</CardTitle>
+                        <CardDescription>Selection controls for lists and agreements.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex flex-col gap-4">
+                            <div class="flex items-center gap-2">
+                                <Checkbox Size="sm" Checked="_checkboxChecked" CheckedChanged="OnCheckboxCheckedChanged" />
+                                <Label>Small checkbox</Label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Checkbox Checked="_checkboxChecked2" CheckedChanged="OnCheckbox2CheckedChanged" />
+                                <Label>Default checkbox</Label>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <Checkbox Size="lg" Checked="_checkboxChecked3" CheckedChanged="OnCheckbox3CheckedChanged" />
+                                <Label>Large checkbox</Label>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Separator</CardTitle>
+                        <CardDescription>Visual separation of content blocks.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-4">
+                            <div>Content above</div>
+                            <Separator />
+                            <div>Content below</div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            @* Column 4: Surfaces & Identity *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Cards</CardTitle>
+                        <CardDescription>Composable surfaces for grouping content.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Card Title</CardTitle>
+                                <CardDescription>Card description goes here.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <p>This is the card content area.</p>
+                            </CardContent>
+                            <CardFooter>
+                                <Button>Action</Button>
+                            </CardFooter>
+                        </Card>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Dialog</CardTitle>
+                        <CardDescription>Overlay for critical decisions and flows.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Dialog @bind-Open="DialogOpen">
+                            <DialogTrigger>
+                                <Button>Open Dialog</Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle>Are you absolutely sure?</DialogTitle>
+                                    <DialogDescription>
+                                        This action cannot be undone. This will permanently delete your account
+                                        and remove your data from our servers.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                    <Button Variant="outline" @onclick="() => DialogOpen = false">Cancel</Button>
+                                    <Button Variant="destructive" @onclick="() => DialogOpen = false">Continue</Button>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Avatar</CardTitle>
+                        <CardDescription>User identity and presence.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex flex-wrap gap-4 items-center">
+                            <Avatar Size="sm">
+                                <AvatarImage src="https://github.com/shadcn.png" alt="@Username" />
+                                <AvatarFallback>CN</AvatarFallback>
+                            </Avatar>
+                            <Avatar Size="default">
+                                <AvatarImage src="https://github.com/shadcn.png" alt="@Username" />
+                                <AvatarFallback>CN</AvatarFallback>
+                            </Avatar>
+                            <Avatar Size="lg">
+                                <AvatarImage src="https://github.com/shadcn.png" alt="@Username" />
+                                <AvatarFallback>CN</AvatarFallback>
+                            </Avatar>
+                            <Avatar>
+                                <AvatarFallback>AB</AvatarFallback>
+                                <AvatarBadge>
+                                    <svg class="size-2" fill="currentColor" viewBox="0 0 8 8">
+                                        <circle cx="4" cy="4" r="4" />
+                                    </svg>
+                                </AvatarBadge>
+                            </Avatar>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    };
+
+    private RenderFragment RenderSection2 => __builder =>
+    {
+        <div class="flex flex-col gap-2 my-8">
+            <p class="text-foreground">
+                Intermediate components. Most use the essential components above under the hood.
+            </p>
+            <p class="text-xs text-muted-foreground">
+                table, accordion, tabs, select/textarea/calendar, progress, skeleton, toast, sheet, command, popover.
+            </p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            @* Column 1: Data & Progress *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Appointment History</CardTitle>
+                        <CardDescription>Recent visits and upcoming appointments.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Date</TableHead>
+                                    <TableHead>Type</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                <TableRow>
+                                    <TableCell>Jan 12</TableCell>
+                                    <TableCell>Follow-up</TableCell>
+                                    <TableCell>Completed</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>Jan 20</TableCell>
+                                    <TableCell>Cardio</TableCell>
+                                    <TableCell>Scheduled</TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell>Feb 3</TableCell>
+                                    <TableCell>Nutrition</TableCell>
+                                    <TableCell>Cancelled</TableCell>
+                                </TableRow>
+                            </TableBody>
+                            <TableCaption>Sample data for appointment history.</TableCaption>
+                        </Table>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Loading Progress</CardTitle>
+                        <CardDescription>Visualize long-running health data tasks.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-4">
+                            <div class="space-y-1">
+                                <p class="text-xs text-muted-foreground">Syncing wearable data (@_progressValue%)</p>
+                                <Progress Value="@_progressValue" />
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-xs text-muted-foreground">Loading appointments (indeterminate)</p>
+                                <div class="relative overflow-hidden rounded-full h-2 bg-primary/20">
+                                    <div class="absolute inset-y-0 left-0 w-1/3 bg-primary animate-[progress-indeterminate_1.2s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
+                                </div>
+                            </div>
+                            <Button Variant="outline" Size="sm" @onclick="StepProgress">
+                                Advance progress
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Patient Drawer</CardTitle>
+                        <CardDescription>Slide-in panel for rich details.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Sheet Open="_sheetOpen" OpenChanged="OnSheetOpenChanged">
+                            <SheetTrigger Class="inline-flex">
+                                <Button Size="sm">Open drawer</Button>
+                            </SheetTrigger>
+                            <SheetContent>
+                                <SheetHeader>
+                                    <h2 class="text-lg font-semibold text-foreground">Patient overview</h2>
+                                    <p class="text-sm text-muted-foreground">
+                                        Quick access to key health information.
+                                    </p>
+                                </SheetHeader>
+                                <div class="flex-1 p-4 space-y-3">
+                                    <p class="text-sm text-muted-foreground">
+                                        Name: Alex Johnson
+                                    </p>
+                                    <p class="text-sm text-muted-foreground">
+                                        Last visit: 2 weeks ago
+                                    </p>
+                                    <p class="text-sm text-muted-foreground">
+                                        Next appointment: Feb 3 · Cardiology
+                                    </p>
+                                </div>
+                                <SheetFooter>
+                                    <div class="flex justify-end gap-2">
+                                        <Button Variant="outline" Size="sm" @onclick="() => _sheetOpen = false">Close</Button>
+                                        <Button Size="sm">Open full record</Button>
+                                    </div>
+                                </SheetFooter>
+                            </SheetContent>
+                        </Sheet>
+                    </CardContent>
+                </Card>
+            </div>
+
+            @* Column 2: FAQs & Skeletons *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Symptom FAQs</CardTitle>
+                        <CardDescription>Guidance for common questions.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Accordion>
+                            <AccordionItem>
+                                <AccordionTrigger>
+                                    When should I book an appointment?
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    If symptoms last longer than a week or suddenly worsen, consider booking an appointment.
+
+                                    <div class="flex flex-wrap gap-2 items-center">
+                                        <Button Variant="default">Default</Button>
+                                        <Button Variant="secondary">Secondary</Button>
+                                        <Button Variant="destructive">Destructive</Button>
+                                        <Button Variant="outline">Outline</Button>
+                                        <Button Variant="ghost">Ghost</Button>
+                                        <Button Variant="link">Link</Button>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                            <AccordionItem>
+                                <AccordionTrigger>
+                                    What information should I bring?
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    Bring a list of medications, recent measurements, and a brief symptom history.
+                                </AccordionContent>
+                            </AccordionItem>
+                        </Accordion>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Loading Skeletons</CardTitle>
+                        <CardDescription>Placeholder layout while fetching content.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-3">
+                            <Skeleton Class="h-4 w-1/3" />
+                            <Skeleton Class="h-3 w-full" />
+                            <Skeleton Class="h-3 w-5/6" />
+                            <div class="grid grid-cols-3 gap-2 mt-2">
+                                <Skeleton Class="h-16 w-full" />
+                                <Skeleton Class="h-16 w-full" />
+                                <Skeleton Class="h-16 w-full" />
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <CommandPaletteDemo />
+            </div>
+
+            @* Column 3: Tabs & Toasts *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Dashboard Tabs</CardTitle>
+                        <CardDescription>High-level sections for a health dashboard.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <TabsRoot @bind-Value="_activeDashboardTab">
+                            <TabsList class="mb-4">
+                                <TabsTrigger Value="overview">Overview</TabsTrigger>
+                                <TabsTrigger Value="appointments">Appointments</TabsTrigger>
+                                <TabsTrigger Value="symptoms">Symptoms</TabsTrigger>
+                            </TabsList>
+                            <TabsContent Value="overview">
+                                <p class="text-sm text-muted-foreground">
+                                    Key metrics and trends across your health data.
+                                </p>
+                            </TabsContent>
+                            <TabsContent Value="appointments">
+                                <p class="text-sm text-muted-foreground">
+                                    Upcoming visits, reminders, and follow-up actions.
+                                </p>
+                            </TabsContent>
+                            <TabsContent Value="symptoms">
+                                <p class="text-sm text-muted-foreground">
+                                    Recent symptom logs and flags that need review.
+                                </p>
+                            </TabsContent>
+                        </TabsRoot>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Toasts</CardTitle>
+                        <CardDescription>Surface transient feedback and alerts.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="flex flex-wrap gap-2">
+                            <Button Size="sm" @onclick="() => ShowToast(ToastType.Success)">
+                                Success
+                            </Button>
+                            <Button Size="sm" Variant="destructive" @onclick="() => ShowToast(ToastType.Error)">
+                                Error
+                            </Button>
+                            <Button Size="sm" Variant="outline" @onclick="() => ShowToast(ToastType.Info)">
+                                Info
+                            </Button>
+                        </div>
+                        <p class="mt-3 text-xs text-muted-foreground">
+                            Toasts appear in the global notification container.
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Appointment Date</CardTitle>
+                        <CardDescription>Pick a target date for your next visit.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-3">
+                            <Calendar Label="Preferred date"
+                                      @bind-Value="_appointmentDate"
+                                      MinDate="@DateOnly.FromDateTime(DateTime.Today)" />
+                            <p class="text-xs text-muted-foreground">
+                                Selected: @(_appointmentDate?.ToString("MMM d, yyyy") ?? "None")
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            @* Column 4: Forms & Advanced Navigation *@
+            <div class="flex flex-col gap-4">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Clinic Selection</CardTitle>
+                        <CardDescription>Choose a preferred clinic for your appointment.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <Label>Clinic</Label>
+                                <Select
+                                    Value="@_selectedClinic"
+                                    ValueChanged="OnClinicChanged"
+                                    Placeholder="Select a clinic"
+                                    Label="Clinics"
+                                    Options="_clinicOptions">
+                                </Select>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Selected: @(_selectedClinic is null ? "None" : _selectedClinicDisplay)
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Country Combobox</CardTitle>
+                        <CardDescription>Select component with search functionality.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-3">
+                            <div class="space-y-1">
+                                <Label>Country</Label>
+                                <Combobox
+                                    Value="@_selectedCountry"
+                                    ValueChanged="OnCountryChanged"
+                                    Placeholder="Select country"
+                                    Label="Countries"
+                                    Options="_countryOptions">
+                                </Combobox>
+                            </div>
+                            <p class="text-xs text-muted-foreground">
+                                Selected: @_selectedCountryDisplay
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Symptom Description</CardTitle>
+                        <CardDescription>Capture a short description before your visit.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-3">
+                            <Label for="symptom-textarea">Symptoms</Label>
+                            <Textarea id="symptom-textarea"
+                                      Rows="5"
+                                      Placeholder="Describe your symptoms, when they started, and anything that makes them better or worse."
+                                      @bind-Value="_symptomNotes" />
+                            <p class="text-xs text-muted-foreground">
+                                @(_symptomNotes?.Length ?? 0) characters
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Contextual Popover</CardTitle>
+                        <CardDescription>Explain appointment types in place.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Popover>
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm text-foreground">What is a follow-up visit?</span>
+                                <PopoverTrigger Class="inline-flex">
+                                    <Button Size="icon" Variant="outline">
+                                        <span class="sr-only">Explain follow-up visits</span>
+                                        <svg class="size-4" viewBox="0 0 24 24" aria-hidden="true">
+                                            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" />
+                                            <path d="M12 8h.01M11 11h1v5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                        </svg>
+                                    </Button>
+                                </PopoverTrigger>
+                            </div>
+                            <PopoverContent>
+                                <h3 class="text-sm font-medium text-foreground">Follow-up visit</h3>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    A shorter appointment focused on checking progress, adjusting treatment, and answering questions from your last visit.
+                                </p>
+                            </PopoverContent>
+                        </Popover>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Location Selector</CardTitle>
+                        <CardDescription>Three-tier selector for country, state, and city selection.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div class="space-y-3">
+                            <LocationSelector 
+                                @bind-Value="_locationSelection" 
+                                OnSelectionChanged="OnLocationChanged"
+                                ContextChanged="OnLocationContextChanged">
+                                <CountrySelector />
+                                <StateSelector />
+                                <CitySelector />
+                            </LocationSelector>
+                            <p class="text-xs text-muted-foreground">
+                                Selected: @GetLocationDisplay()
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
+    };
+}

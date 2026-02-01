@@ -1,0 +1,54 @@
+@using WebFrontend.Components.UI.Shared
+@* Dropdown menu item component *@
+<div
+    data-slot="dropdown-menu-item"
+    data-inset="@(Inset ? "true" : null)"
+    data-variant="@Variant"
+    class="@GetClass()"
+    @onclick="HandleClick"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] public DropdownMenu? ParentMenu { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool Inset { get; set; }
+    [Parameter] public string Variant { get; set; } = "default";
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string GetClass()
+    {
+        // Match Select component styling
+        var baseClasses =
+            "relative flex cursor-pointer items-center gap-2 rounded-md py-2 text-sm text-foreground " +
+            "outline-hidden select-none transition-all duration-150 " +
+            "hover:bg-muted/70 active:scale-[0.98] active:bg-muted/80 " +
+            "data-[variant=destructive]:text-destructive " +
+            "data-[variant=destructive]:hover:bg-destructive/20 " +
+            "data-[variant=destructive]:active:bg-destructive/30 " +
+            "data-[variant=destructive]:*:[svg]:!text-destructive " +
+            "[&_svg:not([class*='text-'])]:text-muted-foreground " +
+            "data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[disabled]:cursor-not-allowed " +
+            "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+
+        // Apply horizontal padding: equal padding when not inset, extra left padding when inset
+        var paddingClasses = Inset ? "pl-8 pr-3" : "px-3";
+
+        return ClassBuilder.Merge(baseClasses, paddingClasses, Class);
+    }
+
+    private async Task HandleClick()
+    {
+        await OnClick.InvokeAsync();
+        if (ParentMenu != null)
+        {
+            await ParentMenu.CloseAsync();
+        }
+    }
+
+}

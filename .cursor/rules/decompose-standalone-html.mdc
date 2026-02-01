@@ -1,0 +1,213 @@
+---
+description: Guidelines for decomposing standalone HTML (Stitch, etc.) into Blazor components
+alwaysApply: true
+---
+
+# Decomposing Standalone HTML into Blazor
+
+When given standalone HTML (from Stitch, AI generators, or similar tools), systematically decompose it into the Blazor project structure.
+
+## Decomposition Process
+
+### 1. Analyze the HTML Structure First
+- **Identify components**: Sidebar, header, main content, forms, cards, etc.
+- **Identify layout patterns**: Single-page app, multi-section, dashboard
+- **Note dependencies**: External fonts, icon libraries, CDN scripts
+- **Extract color scheme**: Custom colors, dark mode values
+
+### 2. Extract and Organize Styles
+
+**Inline `<style>` blocks:**
+- Move custom CSS to `wwwroot/css/input.css` in appropriate `@layer` sections
+- Convert custom classes to Tailwind utilities where possible
+- Keep only truly custom CSS that can't be expressed in Tailwind
+- Use CSS variables that match the existing design system (shadcn tokens)
+
+**Tailwind config in `<script>`:**
+- Extract `tailwind.config` to `tailwind.config.js`
+- Merge with existing config (don't overwrite)
+- Map custom colors to shadcn design tokens when possible
+- Preserve dark mode configuration if using `class` strategy
+
+**Example:**
+```javascript
+// ❌ BAD: Inline script in HTML
+<script>
+  tailwind.config = { theme: { extend: { colors: { primary: "#3b82f6" } } } };
+</script>
+
+// ✅ GOOD: Add to tailwind.config.js
+export default {
+  theme: {
+    extend: {
+      colors: {
+        primary: "hsl(var(--primary))", // Use existing token
+      },
+    },
+  },
+}
+```
+
+### 3. Extract External Resources
+
+**Fonts:**
+- Add Google Fonts links to `wwwroot/index.html` `<head>`
+- Or configure in CSS if using `@import`
+- Don't duplicate if already present
+
+**Icon Libraries:**
+- Material Symbols, Font Awesome, etc. → add to `wwwroot/index.html`
+- Or use existing icon system if project has one
+
+**CDN Scripts:**
+- Only add if necessary (avoid CDN Tailwind if project uses build process)
+- Prefer npm packages when possible
+
+### 4. Convert HTML to Blazor Components
+
+**Component Structure:**
+- Create separate `.razor` files for distinct UI sections
+- Follow existing patterns: `Pages/` for routes, `Layout/` for layout components
+- Use `@code` blocks for component logic, not inline scripts
+
+**HTML to Blazor Conversion:**
+```html
+<!-- ❌ BAD: Direct HTML copy -->
+<button class="px-4 py-2">Click</button>
+
+<!-- ✅ GOOD: Blazor component -->
+<button @onclick="HandleClick" class="px-4 py-2">Click</button>
+```
+
+**State Management:**
+- Extract interactive behavior to `@code` blocks
+- Use Blazor bindings (`@bind`, `@bind:event`)
+- Replace JavaScript event handlers with Blazor equivalents
+
+### 5. Break Down into Logical Components
+
+**Single Large HTML → Multiple Components:**
+- Sidebar → `Layout/Sidebar.razor` or `Components/Sidebar.razor`
+- Header → `Layout/Header.razor` or component in layout
+- Cards/Sections → Reusable components in `Components/` or `Shared/`
+- Forms → Separate component files
+
+**Example Structure:**
+```
+Standalone HTML with sidebar + main + footer
+  ↓
+Layout/MainLayout.razor (uses Sidebar, Header)
+  ├── Layout/Sidebar.razor
+  ├── Layout/Header.razor
+  └── Pages/YourPage.razor (main content)
+```
+
+### 6. Preserve Design Intent, Not Exact HTML
+
+**Adapt to Blazor Patterns:**
+- Use Blazor routing (`@page` directive) instead of manual navigation
+- Use Blazor forms (`EditForm`) instead of raw `<form>`
+- Use Blazor conditional rendering (`@if`, `@foreach`) instead of JavaScript
+- Maintain visual design but use Blazor-idiomatic code
+
+**Example:**
+```html
+<!-- ❌ BAD: Copying exact HTML structure -->
+<div class="space-y-1">
+  <button onclick="loadReport('glucose')">Glucose Trends</button>
+  <button onclick="loadReport('cardio')">Cardio Stats</button>
+</div>
+
+<!-- ✅ GOOD: Blazor component with proper state -->
+<div class="space-y-1">
+  @foreach (var report in Reports)
+  {
+    <button @onclick="() => LoadReport(report.Id)" 
+            class="@GetButtonClass(report.Id)">
+      @report.Name
+    </button>
+  }
+</div>
+```
+
+### 7. Handle Dark Mode Properly
+
+**If HTML uses `class="dark"` on `<html>`:**
+- Check if project uses dark mode (look for existing dark mode implementation)
+- Use existing dark mode system (don't create new one)
+- Ensure Tailwind dark mode config matches (`darkMode: "class"`)
+
+### 8. Custom CSS Classes
+
+**When to Keep Custom CSS:**
+- Complex animations that can't be done with Tailwind
+- Custom scrollbar styles
+- Chart/grid backgrounds
+- Truly unique visual effects
+
+**Where to Put It:**
+- Add to `wwwroot/css/input.css` in `@layer components` or `@layer utilities`
+- Use CSS variables from existing design system
+- Document why it's custom (can't be Tailwind)
+
+**Example:**
+```css
+/* ✅ GOOD: Custom scrollbar in input.css */
+@layer components {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground));
+    border-radius: 10px;
+  }
+}
+```
+
+## Checklist Before Completing
+
+- [ ] All inline styles extracted to CSS files
+- [ ] Tailwind config merged (not replaced)
+- [ ] External resources added to `index.html` (fonts, icons)
+- [ ] HTML broken into logical Blazor components
+- [ ] Interactive behavior converted to Blazor (`@onclick`, `@bind`, etc.)
+- [ ] No JavaScript in components (use `@code` blocks)
+- [ ] Components follow existing project structure (`Pages/`, `Layout/`, `Components/`)
+- [ ] Dark mode handled consistently with existing system
+- [ ] Custom CSS uses design tokens (CSS variables)
+- [ ] No CDN Tailwind if project uses build process
+- [ ] Components are reusable where appropriate
+
+## Common Mistakes to Avoid
+
+❌ **Copying entire HTML as single component**
+✅ Break into logical, reusable components
+
+❌ **Leaving inline styles in HTML**
+✅ Extract to CSS files
+
+❌ **Adding duplicate Tailwind config**
+✅ Merge with existing config
+
+❌ **Using JavaScript for interactivity**
+✅ Use Blazor bindings and event handlers
+
+❌ **Ignoring existing project patterns**
+✅ Follow existing structure and conventions
+
+❌ **Hardcoding colors instead of using design tokens**
+✅ Use CSS variables from design system
+
+## Example: Full Decomposition
+
+**Input:** Standalone HTML with sidebar, header, main content, chat input
+
+**Output:**
+1. `Layout/MainLayout.razor` - Main layout structure
+2. `Layout/Sidebar.razor` - Sidebar component
+3. `Layout/Header.razor` - Header component  
+4. `Pages/Chat.razor` - Main chat page
+5. `Components/ChatInput.razor` - Reusable input component
+6. `wwwroot/css/input.css` - Custom styles (scrollbar, etc.)
+7. `tailwind.config.js` - Updated with custom colors (merged)
+8. `wwwroot/index.html` - Fonts and icon links added

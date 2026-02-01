@@ -1,0 +1,197 @@
+@WebApi_HostAddress = http://localhost:5003
+@token = your_jwt_token_here
+
+### Health Check - Simple endpoint
+GET {{WebApi_HostAddress}}/health
+Accept: application/json
+
+### Health Check - Detailed status
+GET {{WebApi_HostAddress}}/api/v1/health
+Accept: application/json
+
+###
+
+############################################
+### Authentication Endpoints
+############################################
+
+### Register a new user
+POST {{WebApi_HostAddress}}/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "Test123!@#"
+}
+
+### Login
+POST {{WebApi_HostAddress}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "usernameOrEmail": "testuser",
+  "password": "Test123!@#"
+}
+
+### Get current user (requires authentication)
+GET {{WebApi_HostAddress}}/api/v1/auth/me
+Authorization: Bearer {{token}}
+
+###
+
+############################################
+### Todo Endpoints
+############################################
+
+### Get all todos (with optional filters)
+GET {{WebApi_HostAddress}}/api/v1/todos
+Authorization: Bearer {{token}}
+
+### Get all completed todos
+GET {{WebApi_HostAddress}}/api/v1/todos?status=completed
+Authorization: Bearer {{token}}
+
+### Get all pending todos
+GET {{WebApi_HostAddress}}/api/v1/todos?status=pending
+Authorization: Bearer {{token}}
+
+### Get todos by priority
+GET {{WebApi_HostAddress}}/api/v1/todos?priority=high
+Authorization: Bearer {{token}}
+
+### Get todos by tag
+GET {{WebApi_HostAddress}}/api/v1/todos?tag=tag-guid-here
+Authorization: Bearer {{token}}
+
+### Get a specific todo by ID
+GET {{WebApi_HostAddress}}/api/v1/todos/todo-id-here
+Authorization: Bearer {{token}}
+
+### Create a new todo (without tags)
+POST {{WebApi_HostAddress}}/api/v1/todos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Complete project documentation",
+  "description": "Write comprehensive documentation for the todo API",
+  "priority": 1,
+  "dueDate": "2026-01-10T12:00:00Z"
+}
+
+### Create a new todo (with tags)
+POST {{WebApi_HostAddress}}/api/v1/todos
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Review pull requests",
+  "description": "Review and merge pending PRs",
+  "priority": 2,
+  "dueDate": "2026-01-05T17:00:00Z",
+  "tagIds": ["tag-id-1", "tag-id-2"]
+}
+
+### Update a todo
+PUT {{WebApi_HostAddress}}/api/v1/todos/todo-id-here
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Updated todo title",
+  "description": "Updated description",
+  "priority": 0,
+  "dueDate": "2026-01-15T12:00:00Z",
+  "tagIds": []
+}
+
+### Toggle todo completion status
+PATCH {{WebApi_HostAddress}}/api/v1/todos/todo-id-here/complete
+Authorization: Bearer {{token}}
+
+### Delete a todo
+DELETE {{WebApi_HostAddress}}/api/v1/todos/todo-id-here
+Authorization: Bearer {{token}}
+
+###
+
+############################################
+### Tag Endpoints
+############################################
+
+### Get all tags
+GET {{WebApi_HostAddress}}/api/v1/tags
+Authorization: Bearer {{token}}
+
+### Get a specific tag by ID
+GET {{WebApi_HostAddress}}/api/v1/tags/tag-id-here
+Authorization: Bearer {{token}}
+
+### Create a new tag
+POST {{WebApi_HostAddress}}/api/v1/tags
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Work",
+  "color": "#FF5733"
+}
+
+### Create another tag
+POST {{WebApi_HostAddress}}/api/v1/tags
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Personal",
+  "color": "#3498DB"
+}
+
+### Update a tag
+PUT {{WebApi_HostAddress}}/api/v1/tags/tag-id-here
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated Work",
+  "color": "#E74C3C"
+}
+
+### Delete a tag
+DELETE {{WebApi_HostAddress}}/api/v1/tags/tag-id-here
+Authorization: Bearer {{token}}
+
+###
+
+############################################
+### Testing Flow Example
+############################################
+
+### 1. Register a user
+# POST /api/v1/auth/register
+# Copy the token from the response
+
+### 2. Create some tags
+# POST /api/v1/tags (create "Work" tag)
+# POST /api/v1/tags (create "Personal" tag)
+# Copy the tag IDs from responses
+
+### 3. Create todos with tags
+# POST /api/v1/todos (use the tag IDs)
+
+### 4. Get all todos
+# GET /api/v1/todos
+
+### 5. Filter todos
+# GET /api/v1/todos?status=pending
+# GET /api/v1/todos?priority=high
+
+### 6. Update a todo
+# PUT /api/v1/todos/{id}
+
+### 7. Toggle completion
+# PATCH /api/v1/todos/{id}/complete
+
+### 8. Get current user info
+# GET /api/v1/auth/me

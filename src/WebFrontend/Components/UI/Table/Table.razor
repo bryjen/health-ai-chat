@@ -1,0 +1,20 @@
+@using WebFrontend.Components.UI.Shared
+@* Table container + table element wrapper *@
+<div
+    data-slot="table-container"
+    class='@ClassBuilder.Merge("relative w-full overflow-x-auto", Class)'
+    @attributes="AdditionalAttributes">
+    <table
+        data-slot="table"
+        class="w-full caption-bottom text-sm"
+    >
+        @ChildContent
+    </table>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}
+

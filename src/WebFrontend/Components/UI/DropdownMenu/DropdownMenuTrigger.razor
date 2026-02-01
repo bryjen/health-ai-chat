@@ -1,0 +1,29 @@
+@* Dropdown menu trigger component *@
+<div 
+    data-slot="dropdown-menu-trigger"
+    data-dropdown-menu-trigger="@ParentMenu?.MenuId"
+    @onclick="HandleClick"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [CascadingParameter] public DropdownMenu? ParentMenu { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task HandleClick()
+    {
+        if (ParentMenu != null)
+        {
+            if (ParentMenu.Open)
+            {
+                await ParentMenu.CloseAsync();
+            }
+            else
+            {
+                await ParentMenu.OpenAsync();
+            }
+        }
+    }
+}

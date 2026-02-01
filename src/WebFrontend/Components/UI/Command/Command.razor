@@ -1,0 +1,10 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Command palette surface with list and input slots *@
+<div
+    data-slot="command"
+    class='@ClassBuilder.Merge("bg-popover text-popover-foreground flex h-full w-full flex-col rounded-xl px-4 pt-3 pb-3 gap-2", Class)'
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+

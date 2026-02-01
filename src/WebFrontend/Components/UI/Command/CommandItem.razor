@@ -1,0 +1,27 @@
+@using WebFrontend.Components.UI.Shared
+
+@* Single command item *@
+<button
+    data-slot="command-item"
+    type="button"
+    class='@ClassBuilder.Merge("data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground relative flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-left transition-colors hover:bg-accent hover:text-accent-foreground", Class)'
+    @onclick="OnClick"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+</button>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnSelect { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private async Task OnClick()
+    {
+        if (OnSelect.HasDelegate)
+        {
+            await OnSelect.InvokeAsync();
+        }
+    }
+}
+

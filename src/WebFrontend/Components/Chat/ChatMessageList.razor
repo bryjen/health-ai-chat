@@ -1,0 +1,122 @@
+@namespace WebFrontend.Components.Chat
+@using WebFrontend.Pages
+@using WebFrontend.Models.Chat
+@using Microsoft.AspNetCore.Components
+@implements IAsyncDisposable
+
+<div @ref="_scrollContainer" data-chat-scroll-container class="flex flex-col flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 pt-6 pb-8 pt-16">
+    <div class="flex-1">
+        <div class="max-w-3xl mx-auto space-y-6">
+        @foreach (var message in Messages)
+        {
+            <div class="flex gap-4 @(message.IsUser ? "justify-end" : "justify-start")">
+                @if (!message.IsUser)
+                {
+                    <div class="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
+                        AI
+                    </div>
+                }
+                <div class="flex flex-col @(message.IsUser ? "items-end" : "items-start") max-w-[80%]">
+                    <div class="px-4 py-3 rounded-lg @(message.IsUser ? "bg-primary text-primary-foreground" : "bg-muted text-foreground")">
+                        <p class="text-sm whitespace-pre-wrap">@message.Content</p>
+                    </div>
+                    @if (!message.IsUser && message.StatusInformation.Any())
+                    {
+                        <div class="flex flex-col gap-2 mt-2">
+                            @foreach (var status in message.StatusInformation)
+                            {
+                                <StatusInformationRenderer StatusInformation="status" />
+                            }
+                        </div>
+                    }
+                    <span class="text-xs text-muted-foreground mt-1 px-1">
+                        @message.Timestamp.ToString("h:mm tt")
+                    </span>
+                </div>
+                @if (message.IsUser)
+                {
+                    <div class="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center text-foreground text-sm font-medium">
+                        You
+                    </div>
+                }
+            </div>
+        }
+
+        @if (IsLoading)
+        {
+            <div class="flex gap-4 justify-start">
+                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-medium">
+                    AI
+                </div>
+                <div class="flex flex-col items-start">
+                    <div class="px-4 py-3 rounded-lg bg-muted">
+                        <div class="flex gap-1">
+                            <div class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                            <div class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                            <div class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<ChatMessage> Messages { get; set; } = Array.Empty<ChatMessage>();
+
+    [Parameter]
+    public bool IsLoading { get; set; }
+
+    [Inject]
+    private IJSRuntime JS { get; set; } = default!;
+
+    private ElementReference _scrollContainer;
+    private int _previousMessageCount;
+    private bool _previousIsLoading;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Scroll to bottom when messages change, loading state changes, or on first render
+        var messagesChanged = Messages.Count != _previousMessageCount;
+        var loadingChanged = IsLoading != _previousIsLoading;
+        
+        if (firstRender || messagesChanged || loadingChanged)
+        {
+            _previousMessageCount = Messages.Count;
+            _previousIsLoading = IsLoading;
+            await ScrollToBottomAsync();
+        }
+    }
+
+    private async Task ScrollToBottomAsync()
+    {
+        try
+        {
+            // Wait for DOM to update
+            await Task.Delay(100);
+            
+            // Scroll the container to bottom using querySelector
+            await JS.InvokeVoidAsync("eval", @"
+                (function() {
+                    const container = document.querySelector('[data-chat-scroll-container]');
+                    if (container) {
+                        container.scrollTop = container.scrollHeight;
+                    }
+                })();
+            ");
+        }
+        catch
+        {
+            // Ignore JS errors - scrolling is not critical
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+}
+

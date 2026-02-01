@@ -1,0 +1,23 @@
+@using WebFrontend.Components.UI.Shared
+@namespace WebFrontend.Components.UI.Dialog
+
+@* Dialog footer component *@
+<div
+    data-slot="dialog-footer"
+    class="@ClassBuilder.Merge("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", Class)"
+    @attributes="AdditionalAttributes">
+    @ChildContent
+    @if (ShowCloseButton)
+    {
+        <DialogClose>
+            <Button Variant="outline">Close</Button>
+        </DialogClose>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool ShowCloseButton { get; set; } = false;
+    [Parameter] public string? Class { get; set; }
+    [Parameter(CaptureUnmatchedValues = true)] public Dictionary<string, object>? AdditionalAttributes { get; set; }
+}

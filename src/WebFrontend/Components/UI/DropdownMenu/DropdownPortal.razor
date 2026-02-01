@@ -1,0 +1,20 @@
+@namespace WebFrontend.Components.UI.DropdownMenu
+@inject DropdownService DropdownService
+@implements IDisposable
+
+@foreach (var dropdown in DropdownService.GetOpenDropdowns())
+{
+    @dropdown.Content
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        DropdownService.OnDropdownsChanged += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        DropdownService.OnDropdownsChanged -= StateHasChanged;
+    }
+}
