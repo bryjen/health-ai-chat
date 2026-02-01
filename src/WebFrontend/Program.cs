@@ -12,6 +12,7 @@ using ILocationApiClient = WebApi.ApiWrapper.Services.ILocationApiClient;
 using LocationApiClient = WebApi.ApiWrapper.Services.LocationApiClient;
 using EpisodesApiClient = WebApi.ApiWrapper.Services.EpisodesApiClient;
 using AssessmentsApiClient = WebApi.ApiWrapper.Services.AssessmentsApiClient;
+using SymptomsApiClient = WebApi.ApiWrapper.Services.SymptomsApiClient;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -120,6 +121,20 @@ builder.Services.AddHttpClient<IAssessmentsApiClient>((sp, client) =>
 {
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
     return new AssessmentsApiClient(httpClient, tokenProvider);
+});
+
+builder.Services.AddHttpClient<ISymptomsApiClient>((sp, client) =>
+{
+    client.BaseAddress = baseUri;
+    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+})
+.AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
+.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
+.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+.AddTypedClient<ISymptomsApiClient>((httpClient, sp) =>
+{
+    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+    return new SymptomsApiClient(httpClient, tokenProvider);
 });
 
 // Register location API client (public endpoints, no auth required)

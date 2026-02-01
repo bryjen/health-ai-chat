@@ -14,6 +14,33 @@ public class SymptomRepository(AppDbContext context)
             .ToListAsync();
     }
 
+    public async Task<List<SymptomWithEpisodeCount>> GetSymptomsWithEpisodeCountAsync(Guid userId)
+    {
+        return await context.Symptoms
+            .Where(s => s.UserId == userId)
+            .Select(s => new SymptomWithEpisodeCount
+            {
+                Id = s.Id,
+                Name = s.Name,
+                Description = s.Description,
+                CreatedAt = s.CreatedAt,
+                UpdatedAt = s.UpdatedAt,
+                EpisodeCount = s.Episodes.Count
+            })
+            .OrderByDescending(s => s.UpdatedAt)
+            .ToListAsync();
+    }
+
+    public class SymptomWithEpisodeCount
+    {
+        public int Id { get; set; }
+        public required string Name { get; set; }
+        public string? Description { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public int EpisodeCount { get; set; }
+    }
+
     public async Task<Symptom> GetOrCreateSymptomAsync(Guid userId, string symptomName, string? description = null)
     {
         var existing = await context.Symptoms

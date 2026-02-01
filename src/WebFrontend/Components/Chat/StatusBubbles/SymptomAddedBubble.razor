@@ -1,47 +1,18 @@
 @namespace WebFrontend.Components.Chat.StatusBubbles
-@using WebFrontend.Models.Chat.StatusTypes
 @using WebFrontend.Components.UI.Shared
-@using Microsoft.AspNetCore.Components
-@*
-<Tooltip>
-    <TooltipTrigger Context="ctx">
 
-        <div class="@GetClasses" @attributes="ctx.Attributes" @onclick="@NavigateToEpisode">
-            <LuListPlus class="h-4 w-4 text-green-400"/>
-            <span class="text-xs">
-                Added symptom: @Status.SymptomName@(Status.Location != null ? $" ({Status.Location})" : "")
-            </span>
-        </div>
-
-    </TooltipTrigger>
-    <TooltipContent>
-        <p>View symptom</p>
-    </TooltipContent>
-</Tooltip>
-*@
-
-<div class="@GetClasses" @onclick="@NavigateToEpisode">
+<div class="@GetClasses">
     <LuListPlus class="h-4 w-4 text-green-400"/>
     <span class="text-xs">
         Added symptom: <b>@Status.SymptomName@(Status.Location != null ? $" ({Status.Location})" : "")</b>
     </span>
 </div>
 
-
 @code {
     private static string GetClasses => ClassBuilder.Merge(
         "px-4 py-3 rounded-full bg-muted/25 text-muted-foreground inline-flex items-center gap-2 max-w-fit border border-border",
-        "transition-all duration-200 ease-in-out hover:brightness-150",
-        "cursor-pointer");
+        "transition-all duration-200 ease-in-out hover:brightness-150");
 
     [Parameter]
     public required SymptomAddedStatus Status { get; set; }
-
-    [Inject]
-    private NavigationManager Navigation { get; set; } = default!;
-
-    private void NavigateToEpisode()
-    {
-        Navigation.NavigateTo($"/episodes/{Status.EpisodeId}");
-    }
 }

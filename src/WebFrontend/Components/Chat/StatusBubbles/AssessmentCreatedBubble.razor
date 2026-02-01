@@ -1,20 +1,25 @@
 @namespace WebFrontend.Components.Chat.StatusBubbles
+@using WebFrontend.Components.UI.Shared
 @using WebFrontend.Models.Chat.StatusTypes
 @using Microsoft.AspNetCore.Components
 
-<div class="px-4 py-3 rounded-lg bg-muted text-foreground inline-flex items-center gap-2 max-w-fit">
+<div class="@GetClasses" @onclick="@(Status.AssessmentId > 0 ? NavigateToAssessment : (Action)(() => { }))">
     <span class="material-symbols-outlined text-sm text-green-400">assessment</span>
-    <span class="text-sm">
-        Assessment created: @Status.Hypothesis (Confidence: @(Status.Confidence.ToString("P0")))
+    <span class="text-xs">
+        Assessment created: <b>@Status.Hypothesis</b> (Confidence: @(Status.Confidence.ToString("P0")))
+        @if (Status.AssessmentId > 0)
+        {
+            <span class="ml-1 text-primary">View →</span>
+        }
     </span>
-    @if (Status.AssessmentId > 0)
-    {
-        <a href="/assessments/@Status.AssessmentId" class="ml-1 text-primary hover:text-primary/80 underline text-sm"
-           @onclick:preventDefault @onclick="NavigateToAssessment">View</a>
-    }
 </div>
 
 @code {
+    private string GetClasses => ClassBuilder.Merge(
+        "px-4 py-3 rounded-full bg-muted/25 text-muted-foreground inline-flex items-center gap-2 max-w-fit border border-border",
+        "transition-all duration-200 ease-in-out hover:brightness-150",
+        Status.AssessmentId > 0 ? "cursor-pointer" : "");
+
     [Parameter]
     public required AssessmentCreatedStatus Status { get; set; }
     
@@ -23,6 +28,9 @@
 
     private void NavigateToAssessment()
     {
-        Navigation.NavigateTo($"/assessments/{Status.AssessmentId}");
+        if (Status.AssessmentId > 0)
+        {
+            Navigation.NavigateTo($"/assessments/{Status.AssessmentId}");
+        }
     }
 }

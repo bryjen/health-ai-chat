@@ -1,12 +1,17 @@
 @namespace WebFrontend.Components.Chat.StatusBubbles
+@using WebFrontend.Components.UI.Shared
 @using WebFrontend.Models.Chat.StatusTypes
 
-<div class="px-4 py-3 rounded-lg bg-muted text-foreground inline-flex items-center gap-2 max-w-fit">
+<div class="@GetClasses">
     <span class="material-symbols-outlined text-sm text-green-400">check_circle</span>
-    <span class="text-sm">@Status.Message</span>
+    <span class="text-xs">@Status.Message</span>
 </div>
 
 @code {
+    private static string GetClasses => ClassBuilder.Merge(
+        "px-4 py-3 rounded-full bg-muted/25 text-muted-foreground inline-flex items-center gap-2 max-w-fit border border-border",
+        "transition-all duration-200 ease-in-out hover:brightness-150");
+
     [Parameter]
     public required AssessmentCompleteStatus Status { get; set; }
 }

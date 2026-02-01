@@ -260,7 +260,7 @@ public class HealthChatOrchestrator(
         // Sort them by type order first, then timestamp to maintain correct order
         if (realTimeStatusUpdates != null && realTimeStatusUpdates.Any())
         {
-            // Sort real-time updates by type order (complete -> created -> analyzing -> generating) then timestamp
+            // Sort real-time updates by type order (generating -> created -> analyzing -> complete) then timestamp
             var sortedUpdates = realTimeStatusUpdates
                 .Select(update =>
                 {
@@ -272,10 +272,10 @@ public class HealthChatOrchestrator(
                     var type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : "";
                     var typeOrder = type switch
                     {
-                        "assessment-complete" => 1,
+                        "assessment-generating" => 1,
                         "assessment-created" => 2,
                         "assessment-analyzing" => 3,
-                        "assessment-generating" => 4,
+                        "assessment-complete" => 4, // Keep for backwards compatibility
                         _ => 5
                     };
                     return new { Update = update, Timestamp = timestamp, TypeOrder = typeOrder };

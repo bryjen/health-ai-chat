@@ -233,7 +233,8 @@ Always call the appropriate functions when users report symptoms or request acti
                 input.ConnectionId,
                 statusUpdateService,
                 cancellationToken,
-                statusUpdatesSent);
+                statusUpdatesSent,
+                conversationContext);
 
             // Flush context changes
             await _contextService.FlushContextAsync(conversationContext);
@@ -282,7 +283,8 @@ Always call the appropriate functions when users report symptoms or request acti
         string? connectionId = null,
         IStatusUpdateService? statusUpdateService = null,
         CancellationToken cancellationToken = default,
-        List<object>? statusUpdatesSent = null)
+        List<object>? statusUpdatesSent = null,
+        ConversationContext? conversationContext = null)
     {
         const int maxTurns = 15;
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
@@ -294,11 +296,65 @@ Always call the appropriate functions when users report symptoms or request acti
         int turnCount = 0;
         string? finalResponse = null;
         var initialHistoryCount = chatHistory.Count;
+        int? assessmentIdBeforeTurn = null;
 
         while (turnCount < maxTurns)
         {
             turnCount++;
             Logger.LogDebug("Multi-turn agentic loop: Turn {TurnNumber}/{MaxTurns}", turnCount, maxTurns);
+            
+            // Track assessment ID at start of turn to detect new ones
+            if (conversationContext != null)
+            {
+                assessmentIdBeforeTurn = conversationContext.CurrentAssessment?.Id;
+                
+                // Send "generating assessment" BEFORE calling the AI if we have active episodes
+                // and haven't sent it yet, and user message suggests assessment generation
+                if (connectionId != null && statusUpdateService != null && turnCount == 1)
+                {
+                    var hasActiveEpisodes = conversationContext.ActiveEpisodes.Any();
+                    var alreadySentGenerating = statusUpdatesSent?.Any(s =>
+                    {
+                        if (s == null) return false;
+                        try
+                        {
+                            var typeProp = s.GetType().GetProperty("type");
+                            if (typeProp != null)
+                            {
+                                var typeValue = typeProp.GetValue(s)?.ToString();
+                                return typeValue == "assessment-generating";
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore reflection errors
+                        }
+                        return false;
+                    }) ?? false;
+                    
+                    // Check if user message suggests assessment generation
+                    var userMessage = chatHistory.LastOrDefault(m => m.Role == AuthorRole.User)?.Content ?? "";
+                    var mightGenerateAssessment = hasActiveEpisodes && 
+                        (userMessage.Contains("assessment", StringComparison.OrdinalIgnoreCase) ||
+                         userMessage.Contains("diagnosis", StringComparison.OrdinalIgnoreCase) ||
+                         userMessage.Contains("redo", StringComparison.OrdinalIgnoreCase) ||
+                         userMessage.Contains("what do you think", StringComparison.OrdinalIgnoreCase) ||
+                         userMessage.Contains("evaluate", StringComparison.OrdinalIgnoreCase));
+                    
+                    if (mightGenerateAssessment && !alreadySentGenerating)
+                    {
+                        Logger.LogDebug("Sending generating assessment status - before AI call, active episodes and user message suggests assessment");
+                        await statusUpdateService.SendGeneratingAssessmentAsync(connectionId);
+                        statusUpdatesSent?.Add(new
+                        {
+                            type = "assessment-generating",
+                            message = "Generating assessment...",
+                            timestamp = DateTime.UtcNow
+                        });
+                        await Task.Delay(800); // Delay for UI flow
+                    }
+                }
+            }
 
             try
             {
@@ -355,40 +411,40 @@ Always call the appropriate functions when users report symptoms or request acti
                 {
                     Logger.LogDebug("Turn {TurnNumber}: Functions were invoked (history grew), continuing to next turn", turnCount);
                     
-                    // Detect assessment creation by checking recent messages
-                    if (connectionId != null && statusUpdateService != null)
+                    // Handle assessment status updates
+                    if (connectionId != null && statusUpdateService != null && conversationContext != null)
                     {
-                        var (assessmentCreated, assessmentId, hypothesis, confidence) = DetectAssessmentCreationWithDetails(chatHistory);
-                        if (assessmentCreated)
+                        // Check if a new assessment was created (ID changed or new one created)
+                        var assessmentIdAfter = conversationContext.CurrentAssessment?.Id;
+                        var newAssessmentCreated = assessmentIdAfter.HasValue && 
+                            (assessmentIdBeforeTurn == null || assessmentIdAfter.Value != assessmentIdBeforeTurn.Value);
+                        
+                        // Check if a new assessment was created
+                        if (newAssessmentCreated && conversationContext.CurrentAssessment != null)
                         {
-                            // Send status updates in correct order with delays
-                            // Order: Complete → Created → Analyzing (before final response)
-                            // 1. Assessment complete (after creation)
-                            await statusUpdateService.SendAssessmentCompleteAsync(connectionId);
+                            var assessment = conversationContext.CurrentAssessment;
+                            Logger.LogDebug("Assessment created detected: Id={Id}, Hypothesis={Hypothesis}, Confidence={Confidence}", 
+                                assessment.Id, assessment.Hypothesis, assessment.Confidence);
+                            
+                            // Send assessment-created status with details
+                            Logger.LogDebug("Sending assessment-created status via SignalR: Id={Id}, Hypothesis={Hypothesis}", 
+                                assessment.Id, assessment.Hypothesis);
+                            await statusUpdateService.SendAssessmentCreatedAsync(
+                                connectionId, 
+                                assessment.Id, 
+                                assessment.Hypothesis, 
+                                assessment.Confidence);
                             statusUpdatesSent?.Add(new
                             {
-                                type = "assessment-complete",
-                                message = "Assessment complete",
+                                type = "assessment-created",
+                                assessmentId = assessment.Id,
+                                hypothesis = assessment.Hypothesis,
+                                confidence = assessment.Confidence,
                                 timestamp = DateTime.UtcNow
                             });
                             await Task.Delay(800); // Delay for UI flow
                             
-                            // 2. Send assessment-created status with details if we have them
-                            if (assessmentId > 0 && !string.IsNullOrWhiteSpace(hypothesis))
-                            {
-                                await statusUpdateService.SendAssessmentCreatedAsync(connectionId, assessmentId, hypothesis, confidence);
-                                statusUpdatesSent?.Add(new
-                                {
-                                    type = "assessment-created",
-                                    assessmentId = assessmentId,
-                                    hypothesis = hypothesis,
-                                    confidence = confidence,
-                                    timestamp = DateTime.UtcNow
-                                });
-                                await Task.Delay(800); // Delay for UI flow
-                            }
-                            
-                            // 3. Analyzing assessment (BEFORE final response - analyzing the completed assessment)
+                            // Analyzing assessment (BEFORE final response - analyzing the completed assessment)
                             await statusUpdateService.SendAnalyzingAssessmentAsync(connectionId);
                             statusUpdatesSent?.Add(new
                             {
@@ -397,28 +453,6 @@ Always call the appropriate functions when users report symptoms or request acti
                                 timestamp = DateTime.UtcNow
                             });
                             await Task.Delay(800); // Delay before final response
-                        }
-                        else if (turnCount == 1)
-                        {
-                            // On first turn, check if model might be generating assessment
-                            // This is a heuristic - we check if the user message suggests assessment generation
-                            var mightGenerateAssessment = chatHistory.Any(m => 
-                                m.Role == AuthorRole.User && 
-                                (m.Content?.Contains("assessment", StringComparison.OrdinalIgnoreCase) == true ||
-                                 m.Content?.Contains("diagnosis", StringComparison.OrdinalIgnoreCase) == true ||
-                                 m.Content?.Contains("what do you think", StringComparison.OrdinalIgnoreCase) == true));
-                            
-                            if (mightGenerateAssessment)
-                            {
-                                await statusUpdateService.SendGeneratingAssessmentAsync(connectionId);
-                                statusUpdatesSent?.Add(new
-                                {
-                                    type = "assessment-generating",
-                                    message = "Generating assessment...",
-                                    timestamp = DateTime.UtcNow
-                                });
-                                await Task.Delay(800); // Delay for UI flow
-                            }
                         }
                     }
                     
@@ -481,85 +515,6 @@ Always call the appropriate functions when users report symptoms or request acti
         return finalResponse;
     }
 
-    private (bool Created, int AssessmentId, string Hypothesis, decimal Confidence) DetectAssessmentCreationWithDetails(ChatHistory chatHistory)
-    {
-        // Check recent messages for assessment creation indicators
-        // Look for function results that mention "Created assessment" or assessment IDs
-        var recentMessages = chatHistory
-            .TakeLast(5)
-            .ToList();
-
-        foreach (var message in recentMessages)
-        {
-            // Check if message content contains assessment creation
-            if (!string.IsNullOrWhiteSpace(message.Content))
-            {
-                // Try to parse assessment details from the message
-                // Format: "Created assessment {id}: {hypothesis} (confidence: {confidence:P0})"
-                var content = message.Content;
-                if (content.Contains("Created assessment", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Try to extract assessment ID, hypothesis, and confidence
-                    var idMatch = System.Text.RegularExpressions.Regex.Match(
-                        content, 
-                        @"Created assessment (\d+):\s*([^(]+)\s*\(confidence:\s*(\d+(?:\.\d+)?)%?\)",
-                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    
-                    if (idMatch.Success && idMatch.Groups.Count >= 4)
-                    {
-                        if (int.TryParse(idMatch.Groups[1].Value, out var assessmentId))
-                        {
-                            var hypothesis = idMatch.Groups[2].Value.Trim();
-                            if (decimal.TryParse(idMatch.Groups[3].Value, out var confidencePercent))
-                            {
-                                // Convert percentage to decimal (e.g., 85% -> 0.85)
-                                var confidence = confidencePercent / 100m;
-                                return (true, assessmentId, hypothesis, confidence);
-                            }
-                        }
-                    }
-                    
-                    // Fallback: just detect creation
-                    return (true, 0, string.Empty, 0m);
-                }
-            }
-
-            // Check message items for function call results
-            if (message.Items != null)
-            {
-                foreach (var item in message.Items)
-                {
-                    var itemText = item.ToString();
-                    if (!string.IsNullOrWhiteSpace(itemText) &&
-                        itemText.Contains("Created assessment", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Try to parse from item text
-                        var idMatch = System.Text.RegularExpressions.Regex.Match(
-                            itemText, 
-                            @"Created assessment (\d+):\s*([^(]+)\s*\(confidence:\s*(\d+(?:\.\d+)?)%?\)",
-                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        
-                        if (idMatch.Success && idMatch.Groups.Count >= 4)
-                        {
-                            if (int.TryParse(idMatch.Groups[1].Value, out var assessmentId))
-                            {
-                                var hypothesis = idMatch.Groups[2].Value.Trim();
-                                if (decimal.TryParse(idMatch.Groups[3].Value, out var confidencePercent))
-                                {
-                                    var confidence = confidencePercent / 100m;
-                                    return (true, assessmentId, hypothesis, confidence);
-                                }
-                            }
-                        }
-                        
-                        return (true, 0, string.Empty, 0m);
-                    }
-                }
-            }
-        }
-
-        return (false, 0, string.Empty, 0m);
-    }
 
     private async Task<List<Message>> GetConversationContextAsync(
         Guid? conversationId,

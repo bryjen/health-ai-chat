@@ -1,0 +1,64 @@
+@page "/symptoms"
+@namespace WebFrontend.Pages.Symptoms
+@using Web.Common.DTOs.Health
+
+<PageTitle>Symptoms</PageTitle>
+
+<div class="container mx-auto px-4 py-8 max-w-6xl">
+    <h1 class="text-3xl font-bold mb-6">Symptoms</h1>
+
+    @if (IsLoading)
+    {
+        <div class="flex items-center justify-center py-12">
+            <div class="text-muted-foreground">Loading symptoms...</div>
+        </div>
+    }
+    else if (ErrorMessage != null)
+    {
+        <div class="bg-destructive/10 border border-destructive rounded-lg p-4 mb-4">
+            <div class="text-destructive">@ErrorMessage</div>
+        </div>
+    }
+    else if (Symptoms == null || !Symptoms.Any())
+    {
+        <div class="flex items-center justify-center py-12">
+            <div class="text-muted-foreground">No symptoms found</div>
+        </div>
+    }
+    else
+    {
+        <div class="space-y-4">
+            @foreach (var symptom in Symptoms)
+            {
+                <div class="bg-card border rounded-lg p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-start justify-between mb-3">
+                        <div class="flex-1">
+                            <h2 class="text-xl font-semibold mb-2">@symptom.Name</h2>
+                            @if (!string.IsNullOrWhiteSpace(symptom.Description))
+                            {
+                                <p class="text-muted-foreground mb-3">@symptom.Description</p>
+                            }
+                            <div class="flex items-center gap-4 text-sm text-muted-foreground">
+                                <span class="inline-flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm">event</span>
+                                    <span>Created: @symptom.CreatedAt.ToString("MMMM dd, yyyy")</span>
+                                </span>
+                                @if (symptom.UpdatedAt != symptom.CreatedAt)
+                                {
+                                    <span class="inline-flex items-center gap-1">
+                                        <span class="material-symbols-outlined text-sm">update</span>
+                                        <span>Updated: @symptom.UpdatedAt.ToString("MMMM dd, yyyy")</span>
+                                    </span>
+                                }
+                                <span class="inline-flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm">timeline</span>
+                                    <span>@symptom.EpisodeCount episode(s)</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
