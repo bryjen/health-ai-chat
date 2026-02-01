@@ -23,4 +23,13 @@ public interface IAssessmentsApiClient
     /// <returns>List of recent assessments</returns>
     /// <exception cref="Exceptions.ApiException">Thrown for API errors.</exception>
     Task<List<AssessmentDto>> GetRecentAssessmentsAsync(int limit = 10);
+
+    /// <summary>
+    /// Gets an assessment by ID.
+    /// </summary>
+    /// <param name="id">The assessment ID</param>
+    /// <returns>The assessment details</returns>
+    /// <exception cref="Exceptions.ApiNotFoundException">Thrown when assessment is not found (404).</exception>
+    /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
+    Task<AssessmentDto> GetAssessmentByIdAsync(int id);
 }

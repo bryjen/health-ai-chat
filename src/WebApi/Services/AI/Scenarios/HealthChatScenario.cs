@@ -17,7 +17,7 @@ namespace WebApi.Services.AI.Scenarios;
 /// Concrete implementation of the health chat AI scenario.
 /// Handles symptom tracking and appointment booking conversations.
 /// </summary>
-public class HealthChatScenario : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>
+public partial class HealthChatScenario : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>
 {
     private const string SystemPromptTemplate = @"You are a helpful healthcare assistant. Your role is to:
 1. Listen to users' health concerns and symptoms
@@ -25,6 +25,15 @@ public class HealthChatScenario : AiScenarioHandler<HealthChatScenarioRequest, H
 3. Progressively explore symptoms to understand them better
 4. Assess situations and provide recommendations
 5. Provide helpful health guidance
+
+## Multi-Turn Behavior
+
+You can make multiple turns to gather information before responding:
+- Call functions to track symptoms, get episode details, or create assessments
+- Analyze the function results
+- Call additional functions if needed
+- When you have all the information you need, provide your final response without calling any functions
+- You decide when you're done - provide your final answer when you're ready
 
 ## Symptom Tracking
 
@@ -130,6 +139,25 @@ Always call the appropriate functions when users report symptoms or request acti
         HealthChatScenarioRequest input,
         CancellationToken cancellationToken = default)
     {
+        return await ExecuteAsyncInternal(input, cancellationToken, (IStatusUpdateService?)null);
+    }
+
+    public async Task<HealthChatScenarioResponse> ExecuteAsyncInternal(
+        HealthChatScenarioRequest input,
+        CancellationToken cancellationToken,
+        IStatusUpdateService? statusUpdateService)
+    {
+        return await ExecuteAsyncImpl(input, cancellationToken, statusUpdateService);
+    }
+
+    private async Task<HealthChatScenarioResponse> ExecuteAsyncImpl(
+        HealthChatScenarioRequest input,
+        CancellationToken cancellationToken,
+        IStatusUpdateService? statusUpdateService)
+    {
+        // Track status updates sent during processing
+        var statusUpdatesSent = new List<object>();
+        
         try
         {
             // Hydrate conversation context
@@ -199,12 +227,21 @@ Always call the appropriate functions when users report symptoms or request acti
             chatHistory.AddUserMessage(input.Message);
 
             // Get AI response using request kernel with plugins
-            var responseText = await GetChatCompletionWithKernelAsync(requestKernel, chatHistory, cancellationToken);
+            var responseText = await GetChatCompletionWithKernelAsync(
+                requestKernel, 
+                chatHistory, 
+                input.ConnectionId,
+                statusUpdateService,
+                cancellationToken,
+                statusUpdatesSent);
 
             // Flush context changes
             await _contextService.FlushContextAsync(conversationContext);
 
-            return CreateResponse(responseText);
+            var response = CreateResponse(responseText);
+            response.StatusUpdatesSent = statusUpdatesSent;
+            
+            return response;
         }
         catch (Exception ex)
         {
@@ -242,25 +279,286 @@ Always call the appropriate functions when users report symptoms or request acti
     private async Task<string> GetChatCompletionWithKernelAsync(
         Kernel kernel,
         ChatHistory chatHistory,
-        CancellationToken cancellationToken = default)
+        string? connectionId = null,
+        IStatusUpdateService? statusUpdateService = null,
+        CancellationToken cancellationToken = default,
+        List<object>? statusUpdatesSent = null)
     {
+        const int maxTurns = 15;
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-        var executionSettings = new Microsoft.SemanticKernel.Connectors.OpenAI.OpenAIPromptExecutionSettings
+        var executionSettings = new OpenAIPromptExecutionSettings
         {
-            ToolCallBehavior = Microsoft.SemanticKernel.Connectors.OpenAI.ToolCallBehavior.AutoInvokeKernelFunctions
+            ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
         };
 
-        var response = await chatCompletionService.GetChatMessageContentsAsync(
-            chatHistory,
-            executionSettings,
-            kernel,
-            cancellationToken: cancellationToken);
+        int turnCount = 0;
+        string? finalResponse = null;
+        var initialHistoryCount = chatHistory.Count;
 
-        var assistantMessage = response.FirstOrDefault();
-        var responseText = assistantMessage?.Content ?? "I apologize, but I couldn't generate a response.";
+        while (turnCount < maxTurns)
+        {
+            turnCount++;
+            Logger.LogDebug("Multi-turn agentic loop: Turn {TurnNumber}/{MaxTurns}", turnCount, maxTurns);
 
-        Logger.LogDebug("Generated AI response of length {Length} characters", responseText.Length);
-        return responseText;
+            try
+            {
+                var response = await chatCompletionService.GetChatMessageContentsAsync(
+                    chatHistory,
+                    executionSettings,
+                    kernel,
+                    cancellationToken: cancellationToken);
+
+                var assistantMessage = response.FirstOrDefault();
+                
+                if (assistantMessage == null)
+                {
+                    Logger.LogWarning("No assistant message returned on turn {TurnNumber}", turnCount);
+                    break;
+                }
+
+                // Check if response has content (final response)
+                // With AutoInvokeKernelFunctions, function calls are handled internally and the model
+                // is called again until it provides a final response. However, we want explicit control,
+                // so we check if the chat history grew (indicating function calls were made).
+                bool hasContent = !string.IsNullOrWhiteSpace(assistantMessage.Content);
+                
+                // Check if chat history grew (indicates function calls were made and results added)
+                var historyGrew = chatHistory.Count > initialHistoryCount + turnCount;
+                
+                if (historyGrew)
+                {
+                    Logger.LogDebug("Turn {TurnNumber}: Chat history grew (from {Initial} to {Current}), indicating function calls were made", 
+                        turnCount, initialHistoryCount + turnCount, chatHistory.Count);
+                }
+
+                // If we have content, this is likely the final response
+                // However, with AutoInvokeKernelFunctions, the model might still want to make more calls
+                // So we check if the history grew - if it did, functions were called and we should continue
+                if (hasContent && !historyGrew)
+                {
+                    // Final response - no function calls were made, we have content
+                    // Send a brief delay to ensure status messages are displayed before final message
+                    if (connectionId != null && statusUpdateService != null && statusUpdatesSent != null && statusUpdatesSent.Any())
+                    {
+                        await Task.Delay(1000); // Longer delay to ensure all status messages appear first
+                    }
+                    
+                    finalResponse = assistantMessage.Content ?? string.Empty;
+                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})", 
+                        turnCount, finalResponse.Length);
+                    break;
+                }
+
+                // If history grew, function calls were made and we should continue
+                // Add the assistant message to history and continue
+                if (historyGrew)
+                {
+                    Logger.LogDebug("Turn {TurnNumber}: Functions were invoked (history grew), continuing to next turn", turnCount);
+                    
+                    // Detect assessment creation by checking recent messages
+                    if (connectionId != null && statusUpdateService != null)
+                    {
+                        var (assessmentCreated, assessmentId, hypothesis, confidence) = DetectAssessmentCreationWithDetails(chatHistory);
+                        if (assessmentCreated)
+                        {
+                            // Send status updates in correct order with delays
+                            // Order: Complete → Created → Analyzing (before final response)
+                            // 1. Assessment complete (after creation)
+                            await statusUpdateService.SendAssessmentCompleteAsync(connectionId);
+                            statusUpdatesSent?.Add(new
+                            {
+                                type = "assessment-complete",
+                                message = "Assessment complete",
+                                timestamp = DateTime.UtcNow
+                            });
+                            await Task.Delay(800); // Delay for UI flow
+                            
+                            // 2. Send assessment-created status with details if we have them
+                            if (assessmentId > 0 && !string.IsNullOrWhiteSpace(hypothesis))
+                            {
+                                await statusUpdateService.SendAssessmentCreatedAsync(connectionId, assessmentId, hypothesis, confidence);
+                                statusUpdatesSent?.Add(new
+                                {
+                                    type = "assessment-created",
+                                    assessmentId = assessmentId,
+                                    hypothesis = hypothesis,
+                                    confidence = confidence,
+                                    timestamp = DateTime.UtcNow
+                                });
+                                await Task.Delay(800); // Delay for UI flow
+                            }
+                            
+                            // 3. Analyzing assessment (BEFORE final response - analyzing the completed assessment)
+                            await statusUpdateService.SendAnalyzingAssessmentAsync(connectionId);
+                            statusUpdatesSent?.Add(new
+                            {
+                                type = "assessment-analyzing",
+                                message = "Analyzing assessment...",
+                                timestamp = DateTime.UtcNow
+                            });
+                            await Task.Delay(800); // Delay before final response
+                        }
+                        else if (turnCount == 1)
+                        {
+                            // On first turn, check if model might be generating assessment
+                            // This is a heuristic - we check if the user message suggests assessment generation
+                            var mightGenerateAssessment = chatHistory.Any(m => 
+                                m.Role == AuthorRole.User && 
+                                (m.Content?.Contains("assessment", StringComparison.OrdinalIgnoreCase) == true ||
+                                 m.Content?.Contains("diagnosis", StringComparison.OrdinalIgnoreCase) == true ||
+                                 m.Content?.Contains("what do you think", StringComparison.OrdinalIgnoreCase) == true));
+                            
+                            if (mightGenerateAssessment)
+                            {
+                                await statusUpdateService.SendGeneratingAssessmentAsync(connectionId);
+                                statusUpdatesSent?.Add(new
+                                {
+                                    type = "assessment-generating",
+                                    message = "Generating assessment...",
+                                    timestamp = DateTime.UtcNow
+                                });
+                                await Task.Delay(800); // Delay for UI flow
+                            }
+                        }
+                    }
+                    
+                    // Add assistant message to history if it has content
+                    // Function results are already added by AutoInvokeKernelFunctions
+                    if (hasContent && !string.IsNullOrWhiteSpace(assistantMessage.Content))
+                    {
+                        chatHistory.AddAssistantMessage(assistantMessage.Content);
+                    }
+                    
+                    // Update initial count for next iteration
+                    initialHistoryCount = chatHistory.Count;
+                    continue;
+                }
+
+                // If we have content but history didn't grow, this should be final
+                if (hasContent)
+                {
+                    finalResponse = assistantMessage.Content;
+                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})", 
+                        turnCount, finalResponse.Length);
+                    break;
+                }
+
+                // If we have neither content nor history growth, something unexpected happened
+                Logger.LogWarning("Turn {TurnNumber}: Unexpected response - no content and no history growth", turnCount);
+                finalResponse = assistantMessage.Content ?? "I apologize, but I couldn't generate a response.";
+                break;
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error on turn {TurnNumber} of multi-turn loop", turnCount);
+                throw;
+            }
+        }
+
+        if (turnCount >= maxTurns)
+        {
+            Logger.LogWarning("Multi-turn loop reached maximum turns ({MaxTurns}). Using last response.", maxTurns);
+            // Get the last assistant message from history as fallback
+            var lastAssistantMessage = chatHistory
+                .Where(m => m.Role == AuthorRole.Assistant)
+                .LastOrDefault();
+            
+            if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
+            {
+                finalResponse = lastAssistantMessage.Content;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(finalResponse))
+        {
+            Logger.LogWarning("Multi-turn loop completed but no final response generated");
+            finalResponse = "I apologize, but I couldn't generate a response.";
+        }
+
+        Logger.LogDebug("Multi-turn loop completed in {TurnCount} turns. Final response length: {Length}", 
+            turnCount, finalResponse.Length);
+        
+        return finalResponse;
+    }
+
+    private (bool Created, int AssessmentId, string Hypothesis, decimal Confidence) DetectAssessmentCreationWithDetails(ChatHistory chatHistory)
+    {
+        // Check recent messages for assessment creation indicators
+        // Look for function results that mention "Created assessment" or assessment IDs
+        var recentMessages = chatHistory
+            .TakeLast(5)
+            .ToList();
+
+        foreach (var message in recentMessages)
+        {
+            // Check if message content contains assessment creation
+            if (!string.IsNullOrWhiteSpace(message.Content))
+            {
+                // Try to parse assessment details from the message
+                // Format: "Created assessment {id}: {hypothesis} (confidence: {confidence:P0})"
+                var content = message.Content;
+                if (content.Contains("Created assessment", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Try to extract assessment ID, hypothesis, and confidence
+                    var idMatch = System.Text.RegularExpressions.Regex.Match(
+                        content, 
+                        @"Created assessment (\d+):\s*([^(]+)\s*\(confidence:\s*(\d+(?:\.\d+)?)%?\)",
+                        System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    
+                    if (idMatch.Success && idMatch.Groups.Count >= 4)
+                    {
+                        if (int.TryParse(idMatch.Groups[1].Value, out var assessmentId))
+                        {
+                            var hypothesis = idMatch.Groups[2].Value.Trim();
+                            if (decimal.TryParse(idMatch.Groups[3].Value, out var confidencePercent))
+                            {
+                                // Convert percentage to decimal (e.g., 85% -> 0.85)
+                                var confidence = confidencePercent / 100m;
+                                return (true, assessmentId, hypothesis, confidence);
+                            }
+                        }
+                    }
+                    
+                    // Fallback: just detect creation
+                    return (true, 0, string.Empty, 0m);
+                }
+            }
+
+            // Check message items for function call results
+            if (message.Items != null)
+            {
+                foreach (var item in message.Items)
+                {
+                    var itemText = item.ToString();
+                    if (!string.IsNullOrWhiteSpace(itemText) &&
+                        itemText.Contains("Created assessment", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Try to parse from item text
+                        var idMatch = System.Text.RegularExpressions.Regex.Match(
+                            itemText, 
+                            @"Created assessment (\d+):\s*([^(]+)\s*\(confidence:\s*(\d+(?:\.\d+)?)%?\)",
+                            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        
+                        if (idMatch.Success && idMatch.Groups.Count >= 4)
+                        {
+                            if (int.TryParse(idMatch.Groups[1].Value, out var assessmentId))
+                            {
+                                var hypothesis = idMatch.Groups[2].Value.Trim();
+                                if (decimal.TryParse(idMatch.Groups[3].Value, out var confidencePercent))
+                                {
+                                    var confidence = confidencePercent / 100m;
+                                    return (true, assessmentId, hypothesis, confidence);
+                                }
+                            }
+                        }
+                        
+                        return (true, 0, string.Empty, 0m);
+                    }
+                }
+            }
+        }
+
+        return (false, 0, string.Empty, 0m);
     }
 
     private async Task<List<Message>> GetConversationContextAsync(
@@ -348,7 +646,8 @@ Always call the appropriate functions when users report symptoms or request acti
     {
         return new HealthChatScenarioResponse
         {
-            Message = responseText
+            Message = responseText,
+            StatusUpdatesSent = new List<object>()
         };
     }
 }

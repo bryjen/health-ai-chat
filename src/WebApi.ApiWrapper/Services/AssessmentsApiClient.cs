@@ -47,4 +47,19 @@ public class AssessmentsApiClient : BaseApiClient, IAssessmentsApiClient
         var result = await response.Content.ReadFromJsonAsync<List<AssessmentDto>>(BaseApiClient.JsonOptions);
         return result ?? new List<AssessmentDto>();
     }
+
+    /// <inheritdoc/>
+    public async Task<AssessmentDto> GetAssessmentByIdAsync(int id)
+    {
+        await EnsureAuthenticatedAsync();
+        var response = await HttpClient.GetAsync($"api/v1/assessments/{id}");
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await HandleErrorResponseAsync(response);
+        }
+
+        var result = await response.Content.ReadFromJsonAsync<AssessmentDto>(BaseApiClient.JsonOptions);
+        return result ?? throw new InvalidOperationException("Failed to deserialize assessment response");
+    }
 }

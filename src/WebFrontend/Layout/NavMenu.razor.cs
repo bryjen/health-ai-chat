@@ -76,7 +76,7 @@ public partial class NavMenu : ComponentBase, IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading conversations: {ex.Message}");
+            // Error handling - no console logging needed
             Conversations = new List<ConversationSummaryDto>();
         }
         finally

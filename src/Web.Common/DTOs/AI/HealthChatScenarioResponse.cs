@@ -11,4 +11,9 @@ public class HealthChatScenarioResponse
     /// The AI-generated response message.
     /// </summary>
     public required string Message { get; set; }
+
+    /// <summary>
+    /// Status updates sent during processing (for persistence).
+    /// </summary>
+    public List<object> StatusUpdatesSent { get; set; } = new();
 }

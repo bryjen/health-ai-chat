@@ -1,0 +1,12 @@
+@namespace WebFrontend.Components.Chat.StatusBubbles
+@using WebFrontend.Models.Chat.StatusTypes
+
+<div class="px-4 py-3 rounded-lg bg-muted text-foreground inline-flex items-center gap-2 max-w-fit">
+    <span class="material-symbols-outlined text-sm text-yellow-400 animate-pulse">psychology</span>
+    <span class="text-sm">@Status.Message</span>
+</div>
+
+@code {
+    [Parameter]
+    public required AssessmentAnalyzingStatus Status { get; set; }
+}

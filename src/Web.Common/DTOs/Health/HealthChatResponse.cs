@@ -6,4 +6,5 @@ public class HealthChatResponse
     public required Guid ConversationId { get; set; }
     public List<EntityChange> SymptomChanges { get; set; } = new();
     public List<EntityChange> AppointmentChanges { get; set; } = new();
+    public List<EntityChange> AssessmentChanges { get; set; } = new();
 }

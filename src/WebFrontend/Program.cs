@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.JSInterop;
 using WebApi.ApiWrapper.Services;
 using WebFrontend;
 using WebFrontend.Services;
@@ -142,7 +143,12 @@ builder.Services.AddScoped<OAuthProviderRegistry>();
 builder.Services.AddScoped<IOAuthProvider, GoogleOAuthProvider>();
 builder.Services.AddScoped<IOAuthProvider, MicrosoftOAuthProvider>();
 builder.Services.AddScoped<IOAuthProvider, GitHubOAuthProvider>();
-builder.Services.AddScoped<ChatHubClient>();
+builder.Services.AddScoped<ChatHubClient>(sp =>
+{
+    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
+    return new ChatHubClient(tokenProvider, jsRuntime);
+});
 
 // Register dropdown service
 builder.Services.AddScoped<DropdownService>();

@@ -14,6 +14,18 @@
     case SymptomGatheringStatus gathering:
         <SymptomGatheringBubble Status="gathering" />
         break;
+    case AssessmentGeneratingStatus generating:
+        <AssessmentGeneratingBubble Status="generating" />
+        break;
+    case AssessmentCompleteStatus complete:
+        <AssessmentCompleteBubble Status="complete" />
+        break;
+    case AssessmentAnalyzingStatus analyzing:
+        <AssessmentAnalyzingBubble Status="analyzing" />
+        break;
+    case AssessmentCreatedStatus created:
+        <AssessmentCreatedBubble Status="created" />
+        break;
     default:
         @* Fallback for unknown status types *@
         <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-200 text-zinc-900 text-xs border border-zinc-300">

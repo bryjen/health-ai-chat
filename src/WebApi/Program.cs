@@ -66,6 +66,7 @@ builder.Services.AddScoped<HealthChatOrchestrator>();
 
 // SignalR
 builder.Services.AddSignalR();
+builder.Services.AddScoped<IStatusUpdateService, StatusUpdateService>();
 
 var app = builder.Build();
 

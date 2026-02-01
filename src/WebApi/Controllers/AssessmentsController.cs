@@ -78,4 +78,40 @@ public class AssessmentsController : BaseController
 
         return Ok(assessmentDtos);
     }
+
+    /// <summary>
+    /// Get assessment by ID
+    /// </summary>
+    [HttpGet("{id}")]
+    [ProducesResponseType(typeof(AssessmentDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AssessmentDto>> GetAssessmentById(
+        [FromRoute] int id,
+        [FromServices] AssessmentRepository assessmentRepository)
+    {
+        var userId = GetUserId();
+        var assessment = await assessmentRepository.GetAssessmentByIdAsync(id);
+
+        if (assessment == null || assessment.UserId != userId)
+        {
+            return this.NotFoundError("Assessment not found");
+        }
+
+        var assessmentDto = new AssessmentDto
+        {
+            Id = assessment.Id,
+            ConversationId = assessment.ConversationId,
+            Hypothesis = assessment.Hypothesis,
+            Confidence = assessment.Confidence,
+            Differentials = assessment.Differentials,
+            Reasoning = assessment.Reasoning,
+            RecommendedAction = assessment.RecommendedAction,
+            EpisodeIds = assessment.EpisodeIds,
+            NegativeFindingIds = assessment.NegativeFindingIds,
+            CreatedAt = assessment.CreatedAt
+        };
+
+        return Ok(assessmentDto);
+    }
 }

@@ -81,4 +81,10 @@ public class AssessmentRepository(AppDbContext context)
             .Take(limit)
             .ToListAsync();
     }
+
+    public async Task<Assessment?> GetAssessmentByIdAsync(int id)
+    {
+        return await context.Assessments
+            .FirstOrDefaultAsync(a => a.Id == id);
+    }
 }

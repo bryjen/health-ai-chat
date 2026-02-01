@@ -35,7 +35,9 @@ public class ChatHub : Hub
 
         try
         {
-            var (response, _) = await _orchestrator.ProcessHealthMessageAsync(userId, message, conversationId);
+            var connectionId = Context.ConnectionId;
+            var (response, _) = await _orchestrator.ProcessHealthMessageAsync(
+                userId, message, conversationId, connectionId);
             return response;
         }
         catch (Exception ex)

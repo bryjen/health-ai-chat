@@ -19,4 +19,9 @@ public class HealthChatScenarioRequest
     /// The user ID making the request.
     /// </summary>
     public required Guid UserId { get; set; }
+
+    /// <summary>
+    /// SignalR connection ID for sending real-time status updates.
+    /// </summary>
+    public string? ConnectionId { get; set; }
 }
