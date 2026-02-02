@@ -17,7 +17,6 @@ public class Assessment
     public required string RecommendedAction { get; set; } // "self-care", "see-gp", "urgent-care", "emergency"
     
     // Links (stored as JSON arrays of IDs)
-    public List<int>? EpisodeIds { get; set; }
     public List<int>? NegativeFindingIds { get; set; }
     
     public DateTime CreatedAt { get; set; }
@@ -25,4 +24,5 @@ public class Assessment
     // Navigation properties
     public User? User { get; set; }
     public Conversation? Conversation { get; set; }
+    public ICollection<AssessmentEpisodeLink> LinkedEpisodes { get; set; } = new List<AssessmentEpisodeLink>();
 }

@@ -60,6 +60,7 @@ public static class OptionsConfiguration
         services.AddValidatedSettings<OAuthSettings>(configuration, hasValidator: false);
         services.AddValidatedSettings<AzureOpenAiSettings>(configuration);
         services.AddValidatedSettings<VectorStoreSettings>(configuration, hasValidator: false);
+        services.AddValidatedSettings<VersionSettings>(configuration, hasValidator: false);
         
         // enable automatic FluentValidation for ASP.NET Core model binding
         services.AddFluentValidationAutoValidation();

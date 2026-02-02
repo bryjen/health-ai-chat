@@ -21,10 +21,11 @@ public class AssessmentRepository(AppDbContext context)
         List<string>? differentials = null,
         string? reasoning = null,
         string? recommendedAction = null,
-        List<int>? episodeIds = null,
+        Dictionary<int, decimal>? episodeWeights = null,
         List<int>? negativeFindingIds = null)
     {
         var assessment = await context.Assessments
+            .Include(a => a.LinkedEpisodes)
             .FirstOrDefaultAsync(a => a.Id == assessmentId);
 
         if (assessment == null)
@@ -52,9 +53,22 @@ public class AssessmentRepository(AppDbContext context)
         {
             assessment.RecommendedAction = recommendedAction;
         }
-        if (episodeIds != null)
+        if (episodeWeights != null)
         {
-            assessment.EpisodeIds = episodeIds;
+            // Remove existing links
+            context.AssessmentEpisodeLinks.RemoveRange(assessment.LinkedEpisodes);
+            assessment.LinkedEpisodes.Clear();
+
+            // Add new links
+            foreach (var kvp in episodeWeights)
+            {
+                assessment.LinkedEpisodes.Add(new AssessmentEpisodeLink
+                {
+                    EpisodeId = kvp.Key,
+                    Weight = kvp.Value,
+                    Reasoning = null
+                });
+            }
         }
         if (negativeFindingIds != null)
         {
@@ -68,6 +82,9 @@ public class AssessmentRepository(AppDbContext context)
     public async Task<Assessment?> GetAssessmentByConversationAsync(Guid conversationId)
     {
         return await context.Assessments
+            .Include(a => a.LinkedEpisodes)
+                .ThenInclude(l => l.Episode!)
+                    .ThenInclude(e => e.Symptom)
             .Where(a => a.ConversationId == conversationId)
             .OrderByDescending(a => a.CreatedAt)
             .FirstOrDefaultAsync();
@@ -76,6 +93,9 @@ public class AssessmentRepository(AppDbContext context)
     public async Task<List<Assessment>> GetRecentAssessmentsAsync(Guid userId, int limit = 10)
     {
         return await context.Assessments
+            .Include(a => a.LinkedEpisodes)
+                .ThenInclude(l => l.Episode!)
+                    .ThenInclude(e => e.Symptom)
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.CreatedAt)
             .Take(limit)
@@ -85,6 +105,18 @@ public class AssessmentRepository(AppDbContext context)
     public async Task<Assessment?> GetAssessmentByIdAsync(int id)
     {
         return await context.Assessments
+            .Include(a => a.LinkedEpisodes)
+                .ThenInclude(l => l.Episode!)
+                    .ThenInclude(e => e.Symptom)
+            .FirstOrDefaultAsync(a => a.Id == id);
+    }
+
+    public async Task<Assessment?> GetAssessmentWithLinksAsync(int id)
+    {
+        return await context.Assessments
+            .Include(a => a.LinkedEpisodes)
+                .ThenInclude(l => l.Episode!)
+                    .ThenInclude(e => e.Symptom)
             .FirstOrDefaultAsync(a => a.Id == id);
     }
 }

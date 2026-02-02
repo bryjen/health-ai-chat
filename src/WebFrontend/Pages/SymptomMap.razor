@@ -116,7 +116,18 @@
 
             @* Central Graph Visualization *@
             <div class="flex-1 relative overflow-hidden flex items-center justify-center">
-                <SymptomGraph Data="@GraphData" />
+                @if (GraphData != null)
+                {
+                    <SymptomGraph Data="@GraphData" />
+                }
+                else if (IsLoading)
+                {
+                    <div class="text-white">Loading graph data...</div>
+                }
+                else
+                {
+                    <div class="text-white">No graph data available</div>
+                }
             </div>
 
             @* Diagnostic Inference Card (Bottom Left) *@

@@ -11,6 +11,7 @@ public partial class SymptomMap : ComponentBase
 
     private List<EpisodeDto> ActiveEpisodes { get; set; } = new();
     private List<AssessmentDto> RecentAssessments { get; set; } = new();
+    private GraphDataDto? GraphData { get; set; }
     private bool IsLoading { get; set; } = true;
     private string? ErrorMessage { get; set; }
 
@@ -31,10 +32,44 @@ public partial class SymptomMap : ComponentBase
 
             // Load recent assessments
             RecentAssessments = await AssessmentsApiClient.GetRecentAssessmentsAsync(limit: 5);
+
+            // Load graph data for the most recent assessment if available
+            if (RecentAssessments.Any())
+            {
+                try
+                {
+                    var mostRecentAssessment = RecentAssessments.First();
+                    GraphData = await AssessmentsApiClient.GetAssessmentGraphAsync(mostRecentAssessment.Id);
+                }
+                catch (Exception ex)
+                {
+                    // If graph data fails to load, use empty graph data
+                    GraphData = new GraphDataDto
+                    {
+                        Nodes = new List<GraphNodeDto>(),
+                        Links = new List<GraphLinkDto>()
+                    };
+                    // Don't set ErrorMessage here - graph failure shouldn't block the page
+                }
+            }
+            else
+            {
+                // No assessments, use empty graph data
+                GraphData = new GraphDataDto
+                {
+                    Nodes = new List<GraphNodeDto>(),
+                    Links = new List<GraphLinkDto>()
+                };
+            }
         }
         catch (Exception ex)
         {
             ErrorMessage = $"Failed to load data: {ex.Message}";
+            GraphData = new GraphDataDto
+            {
+                Nodes = new List<GraphNodeDto>(),
+                Links = new List<GraphLinkDto>()
+            };
         }
         finally
         {
@@ -241,35 +276,6 @@ public partial class SymptomMap : ComponentBase
         return positions;
     }
 
-    // Hardcoded graph data matching the reference implementation
-    private GraphDataDto GraphData => GetHardcodedGraphData();
-
-    private GraphDataDto GetHardcodedGraphData()
-    {
-        return new GraphDataDto
-        {
-            Nodes = new List<GraphNodeDto>
-            {
-                new GraphNodeDto { Id = "root", Label = "Fever 102.4", Type = GraphNodeType.Root, Value = 40, Group = 1 },
-                new GraphNodeDto { Id = "inf", Label = "Influenza Cluster", Type = GraphNodeType.Diagnosis, Value = 30, Group = 2 },
-                new GraphNodeDto { Id = "cough", Label = "Cough", Type = GraphNodeType.Symptom, Value = 20, Group = 3 },
-                new GraphNodeDto { Id = "headache", Label = "Headache", Type = GraphNodeType.Symptom, Value = 20, Group = 3 },
-                new GraphNodeDto { Id = "chills", Label = "Chills", Type = GraphNodeType.Symptom, Value = 15, Group = 3 },
-                new GraphNodeDto { Id = "sweats", Label = "Night Sweats", Type = GraphNodeType.Symptom, Value = 15, Group = 3 },
-                new GraphNodeDto { Id = "fatigue", Label = "Fatigue", Type = GraphNodeType.Symptom, Value = 15, Group = 3 }
-            },
-            Links = new List<GraphLinkDto>
-            {
-                new GraphLinkDto { Source = "root", Target = "inf", Value = 5 },
-                new GraphLinkDto { Source = "inf", Target = "cough", Value = 3 },
-                new GraphLinkDto { Source = "inf", Target = "headache", Value = 3 },
-                new GraphLinkDto { Source = "root", Target = "chills", Value = 4 },
-                new GraphLinkDto { Source = "root", Target = "sweats", Value = 4 },
-                new GraphLinkDto { Source = "inf", Target = "fatigue", Value = 2 },
-                new GraphLinkDto { Source = "headache", Target = "root", Value = 2 }
-            }
-        };
-    }
 
     private class SymptomDisplay
     {

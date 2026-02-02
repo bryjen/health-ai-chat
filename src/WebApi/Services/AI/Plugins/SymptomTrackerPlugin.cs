@@ -15,7 +15,7 @@ public class SymptomTrackerPlugin(
     SymptomRepository symptomRepository,
     EpisodeRepository episodeRepository,
     NegativeFindingRepository negativeFindingRepository,
-    ConversationContextService contextService,
+    ConversationContextService _,
     ILogger<SymptomTrackerPlugin> logger)
 {
     private ConversationContext? _context;

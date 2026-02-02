@@ -48,6 +48,7 @@ public class AppDbContext(
     public DbSet<Episode> Episodes { get; set; }
     public DbSet<NegativeFinding> NegativeFindings { get; set; }
     public DbSet<Assessment> Assessments { get; set; }
+    public DbSet<AssessmentEpisodeLink> AssessmentEpisodeLinks { get; set; }
     public DbSet<Appointment> Appointments { get; set; }
     public DbSet<MessageEmbedding> MessageEmbeddings { get; set; }
 
@@ -344,17 +345,6 @@ public class AppDbContext(
                         : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
             
-            entity.Property(e => e.EpisodeIds)
-                .HasColumnType("jsonb")
-                .HasConversion(
-                    v => v == null
-                        ? null
-                        : System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                    v => v == null
-                        ? null
-                        : System.Text.Json.JsonSerializer.Deserialize<List<int>>(v,
-                            (System.Text.Json.JsonSerializerOptions?)null));
-            
             entity.Property(e => e.NegativeFindingIds)
                 .HasColumnType("jsonb")
                 .HasConversion(
@@ -379,6 +369,32 @@ public class AppDbContext(
             entity.HasOne(e => e.Conversation)
                 .WithMany()
                 .HasForeignKey(e => e.ConversationId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(e => e.LinkedEpisodes)
+                .WithOne(l => l.Assessment)
+                .HasForeignKey(l => l.AssessmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AssessmentEpisodeLink>(entity =>
+        {
+            entity.HasKey(e => new { e.AssessmentId, e.EpisodeId });
+
+            entity.Property(e => e.Weight).IsRequired().HasColumnType("decimal(3,2)");
+            entity.Property(e => e.Reasoning).HasMaxLength(1000);
+
+            entity.HasIndex(e => e.AssessmentId);
+            entity.HasIndex(e => e.EpisodeId);
+
+            entity.HasOne(e => e.Assessment)
+                .WithMany(a => a.LinkedEpisodes)
+                .HasForeignKey(e => e.AssessmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Episode)
+                .WithMany()
+                .HasForeignKey(e => e.EpisodeId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

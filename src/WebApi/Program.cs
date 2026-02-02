@@ -29,7 +29,7 @@ builder.Services
 
 builder.Services.ConfigureAppOptions(builder.Configuration);
 builder.Services.ConfigureEmail(builder.Configuration);
-builder.Services.ConfigureOpenApi();
+builder.Services.ConfigureOpenApi(builder.Configuration);
 builder.Services.ConfigureDatabase(builder.Configuration, builder.Environment);
 var corsEnabled = builder.Services.ConfigureCors(builder.Configuration);
 builder.Services.AddDataProtection();
@@ -63,6 +63,7 @@ builder.Services.AddScoped<AssessmentPlugin>();
 builder.Services.AddScoped<HealthChatScenario>();
 builder.Services.AddScoped<ResponseRouterService>();
 builder.Services.AddScoped<HealthChatOrchestrator>();
+builder.Services.AddScoped<WebApi.Services.Graph.GraphDataService>();
 
 // SignalR
 builder.Services.AddSignalR();

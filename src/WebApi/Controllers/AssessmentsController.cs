@@ -3,6 +3,7 @@ using Web.Common.DTOs;
 using Web.Common.DTOs.Health;
 using WebApi.Controllers.Utils;
 using WebApi.Repositories;
+using WebApi.Services.Graph;
 
 namespace WebApi.Controllers;
 
@@ -41,7 +42,14 @@ public class AssessmentsController : BaseController
             Differentials = assessment.Differentials,
             Reasoning = assessment.Reasoning,
             RecommendedAction = assessment.RecommendedAction,
-            EpisodeIds = assessment.EpisodeIds,
+            EpisodeIds = assessment.LinkedEpisodes?.Select(l => l.EpisodeId).ToList(), // Backward compatibility
+            LinkedEpisodes = assessment.LinkedEpisodes?.Select(l => new AssessmentEpisodeLinkDto
+            {
+                EpisodeId = l.EpisodeId,
+                Weight = l.Weight,
+                Reasoning = l.Reasoning,
+                EpisodeName = l.Episode?.Symptom?.Name
+            }).ToList(),
             NegativeFindingIds = assessment.NegativeFindingIds,
             CreatedAt = assessment.CreatedAt
         };
@@ -71,7 +79,14 @@ public class AssessmentsController : BaseController
             Differentials = a.Differentials,
             Reasoning = a.Reasoning,
             RecommendedAction = a.RecommendedAction,
-            EpisodeIds = a.EpisodeIds,
+            EpisodeIds = a.LinkedEpisodes?.Select(l => l.EpisodeId).ToList(), // Backward compatibility
+            LinkedEpisodes = a.LinkedEpisodes?.Select(l => new AssessmentEpisodeLinkDto
+            {
+                EpisodeId = l.EpisodeId,
+                Weight = l.Weight,
+                Reasoning = l.Reasoning,
+                EpisodeName = l.Episode?.Symptom?.Name
+            }).ToList(),
             NegativeFindingIds = a.NegativeFindingIds,
             CreatedAt = a.CreatedAt
         }).ToList();
@@ -107,11 +122,42 @@ public class AssessmentsController : BaseController
             Differentials = assessment.Differentials,
             Reasoning = assessment.Reasoning,
             RecommendedAction = assessment.RecommendedAction,
-            EpisodeIds = assessment.EpisodeIds,
+            EpisodeIds = assessment.LinkedEpisodes?.Select(l => l.EpisodeId).ToList(), // Backward compatibility
+            LinkedEpisodes = assessment.LinkedEpisodes?.Select(l => new AssessmentEpisodeLinkDto
+            {
+                EpisodeId = l.EpisodeId,
+                Weight = l.Weight,
+                Reasoning = l.Reasoning,
+                EpisodeName = l.Episode?.Symptom?.Name
+            }).ToList(),
             NegativeFindingIds = assessment.NegativeFindingIds,
             CreatedAt = assessment.CreatedAt
         };
 
         return Ok(assessmentDto);
+    }
+
+    /// <summary>
+    /// Get graph data for a specific assessment
+    /// </summary>
+    [HttpGet("{id}/graph")]
+    [ProducesResponseType(typeof(GraphDataDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<GraphDataDto>> GetAssessmentGraph(
+        [FromRoute] int id,
+        [FromServices] GraphDataService graphDataService)
+    {
+        var userId = GetUserId();
+        
+        try
+        {
+            var graphData = await graphDataService.GetAssessmentGraphDataAsync(id, userId);
+            return Ok(graphData);
+        }
+        catch (InvalidOperationException)
+        {
+            return this.NotFoundError("Assessment not found");
+        }
     }
 }

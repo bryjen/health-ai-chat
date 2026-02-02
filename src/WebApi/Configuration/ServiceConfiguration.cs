@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Pgvector.EntityFrameworkCore;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -18,6 +17,7 @@ using OpenTelemetry.Trace;
 using Resend;
 using WebApi.Configuration.Options;
 using WebApi.Data;
+using Microsoft.OpenApi;
 using WebApi.Services.Auth;
 using WebApi.Services.Auth.Validation;
 using WebApi.Services.Email;
@@ -48,7 +48,7 @@ public static class ServiceConfiguration
         var corsOriginsArray = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
         return corsOriginsArray ?? Array.Empty<string>();
     }
-    
+
     /// <summary>
     /// Configures Cross-Origin Resource Sharing (CORS) for the application.
     /// </summary>
@@ -72,7 +72,7 @@ public static class ServiceConfiguration
     /// </para>
     /// </remarks>
     public static bool ConfigureCors(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration)
     {
         // Check if CORS is disabled
@@ -110,39 +110,75 @@ public static class ServiceConfiguration
             }
             // If CORS is disabled, no policy is added, so CORS headers won't be applied
         });
-        
+
         return corsEnabled;
     }
-    
+
     /// <summary>
     /// Configures OpenAPI + Swagger.
     /// </summary>
-    public static void ConfigureOpenApi(this IServiceCollection services)
+    /// <param name="services">The service collection to configure.</param>
+    /// <param name="configuration">The configuration instance to read version settings from.</param>
+    public static void ConfigureOpenApi(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>
         {
             options.SupportNonNullableReferenceTypes();
-            
+
             var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
             if (File.Exists(xmlPath))
             {
                 options.IncludeXmlComments(xmlPath);
             }
+
+            // Configure version information from appsettings
+            var versionSection = configuration.GetSection(VersionSettings.SectionName);
+            var versionSettings = versionSection.Get<VersionSettings>() ?? new VersionSettings();
+            var semanticVersion = versionSettings.ToSemanticVersion();
+
+            options.SwaggerDoc("v1", new OpenApiInfo
+            {
+                Title = "API Documentation",
+                Version = semanticVersion,
+                Description = $"API Version: {semanticVersion}"
+            });
+            
+            // Add JWT Bearer authentication support
+            options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+            {
+                Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.\n\nExample: \"Bearer 12345abcdef\"",
+                Name = "Authorization",
+                In = ParameterLocation.Header,
+                Type = SecuritySchemeType.Http,
+                Scheme = "bearer",
+                BearerFormat = "JWT"
+            });
+            
+            // Make JWT Bearer authentication available globally
+            options.AddSecurityRequirement(_ =>
+            {
+                var schemeRef = new OpenApiSecuritySchemeReference("Bearer");
+                var requirement = new OpenApiSecurityRequirement
+                {
+                    [schemeRef] = []
+                };
+                return requirement;
+            });
         });
     }
-    
+
     /// <summary>
     /// Configures the application's database provider.
     /// </summary>
     /// <remarks>
     /// Falls back to an in-memory EF Core configuration in the case of an empty connection string, OR if connecting
-    /// to the specified URL fails. 
+    /// to the specified URL fails.
     /// </remarks>
     public static void ConfigureDatabase(
-        this IServiceCollection services, 
-        IConfiguration configuration, 
+        this IServiceCollection services,
+        IConfiguration configuration,
         IHostEnvironment? environment = null)
     {
         using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
@@ -179,7 +215,7 @@ public static class ServiceConfiguration
         logger.LogInformation("Using in-memory database provider 'FallbackInMemoryDatabase' due to PostgreSQL connection issues.");
         UseInMemoryDatabase(services, logger);
     }
-    
+
     /// <summary>
     /// Configures JWT Bearer authentication and authorization for the application.
     /// </summary>
@@ -204,10 +240,10 @@ public static class ServiceConfiguration
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when JWT Secret is not configured in non-test environments.</exception>
     public static void ConfigureJwtAuth(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration,
         IHostEnvironment environment)
-    { 
+    {
         // Add JWT Authentication
         var jwtSettings = configuration.GetSection("Jwt");
 
@@ -241,7 +277,7 @@ public static class ServiceConfiguration
 
         services.AddAuthorization();
     }
-    
+
     /// <summary>
     /// Configures OpenTelemetry for distributed tracing, metrics, and logging.
     /// </summary>
@@ -268,15 +304,15 @@ public static class ServiceConfiguration
     /// </para>
     /// </remarks>
     public static void ConfigureOpenTelemetry(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration,
         ILoggingBuilder loggingBuilder,
         IHostEnvironment environment)
     {
         // only emit otel metrics if we aren't in test
-        if (environment.IsEnvironment("Test")) 
+        if (environment.IsEnvironment("Test"))
             return;
-        
+
         var serviceName = configuration["OTEL_SERVICE_NAME"] ?? "WebApi";
         var otlpEndpoint = configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
         var resourceBuilder = ResourceBuilder.CreateDefault().AddService(serviceName);
@@ -329,8 +365,8 @@ public static class ServiceConfiguration
                 }
             });
     }
-    
-    
+
+
     /// <summary>
     /// Configures email services using Resend as the email provider.
     /// </summary>
@@ -349,7 +385,7 @@ public static class ServiceConfiguration
     /// </para>
     /// </remarks>
     public static void ConfigureEmail(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration)
     {
         var resendApiKey = configuration["Email:Resend:ApiKey"] ?? string.Empty;
@@ -358,7 +394,7 @@ public static class ServiceConfiguration
         services.AddTransient<RenderMjmlEmailService>(sp =>
             new RenderMjmlEmailService(sp.GetRequiredService<IResend>(), emailDomain));
     }
-    
+
     /// <summary>
     /// Configures rate limiting for the application.
     /// </summary>
@@ -375,23 +411,23 @@ public static class ServiceConfiguration
         var globalConfig = configuration.GetSection("RateLimiting:Global");
         var authConfig = configuration.GetSection("RateLimiting:Auth");
         var authenticatedConfig = configuration.GetSection("RateLimiting:Authenticated");
-        
+
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            
+
             // Global rate limiter - applies to all requests
             var globalPermitLimit = globalConfig.GetValue<int>("PermitLimit", 100);
             var globalWindowMinutes = globalConfig.GetValue<int>("WindowMinutes", 1);
             var globalQueueLimit = globalConfig.GetValue<int>("QueueLimit", 10);
-            
+
             options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
             {
                 // Use authenticated user ID if available, otherwise use IP address
-                var partitionKey = context.User.Identity?.Name 
-                    ?? context.Connection.RemoteIpAddress?.ToString() 
+                var partitionKey = context.User.Identity?.Name
+                    ?? context.Connection.RemoteIpAddress?.ToString()
                     ?? "anonymous";
-                
+
                 return RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: partitionKey,
                     factory: partition => new FixedWindowRateLimiterOptions
@@ -403,16 +439,16 @@ public static class ServiceConfiguration
                         QueueLimit = globalQueueLimit
                     });
             });
-            
+
             // Auth endpoints policy - stricter limits to prevent brute force attacks (IP-based)
             var authPermitLimit = authConfig.GetValue<int>("PermitLimit", 5);
             var authWindowMinutes = authConfig.GetValue<int>("WindowMinutes", 1);
             var authQueueLimit = authConfig.GetValue<int>("QueueLimit", 2);
-            
+
             options.AddPolicy("auth", context =>
             {
                 var partitionKey = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-                
+
                 return RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: partitionKey,
                     factory: partition => new FixedWindowRateLimiterOptions
@@ -424,12 +460,12 @@ public static class ServiceConfiguration
                         QueueLimit = authQueueLimit
                     });
             });
-            
+
             // Authenticated users policy - higher limits for authenticated users
             var authenticatedPermitLimit = authenticatedConfig.GetValue<int>("PermitLimit", 200);
             var authenticatedWindowMinutes = authenticatedConfig.GetValue<int>("WindowMinutes", 1);
             var authenticatedQueueLimit = authenticatedConfig.GetValue<int>("QueueLimit", 20);
-            
+
             options.AddPolicy("authenticated", context =>
             {
                 var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
@@ -438,7 +474,7 @@ public static class ServiceConfiguration
                     // If not authenticated, use no limiter (will fall back to global)
                     return RateLimitPartition.GetNoLimiter("anonymous");
                 }
-                
+
                 return RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: userId,
                     factory: partition => new FixedWindowRateLimiterOptions
@@ -450,33 +486,33 @@ public static class ServiceConfiguration
                         QueueLimit = authenticatedQueueLimit
                     });
             });
-            
+
             // Custom response when rate limit is exceeded
             options.OnRejected = async (context, cancellationToken) =>
             {
                 context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
                 context.HttpContext.Response.ContentType = "application/json";
-                
+
                 // Try to get retry after from metadata
                 var retryAfter = 60; // default to 60 seconds
                 if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfterValue))
                 {
                     retryAfter = (int)((TimeSpan)retryAfterValue).TotalSeconds;
                 }
-                
+
                 context.HttpContext.Response.Headers.RetryAfter = retryAfter.ToString();
-                
+
                 var response = new
                 {
                     message = "Rate limit exceeded. Please try again later.",
                     retryAfter = retryAfter
                 };
-                
+
                 await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
             };
         });
     }
-    
+
     /// <summary>
     /// Configures response compression for the application (production only).
     /// </summary>
@@ -499,7 +535,7 @@ public static class ServiceConfiguration
             options.EnableForHttps = true; // Enable compression for HTTPS
             options.Providers.Add<BrotliCompressionProvider>();
             options.Providers.Add<GzipCompressionProvider>();
-            
+
             // Compress these MIME types
             options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
             {
@@ -543,15 +579,15 @@ public static class ServiceConfiguration
         {
             // Maximum cacheable response size (100 MB)
             options.MaximumBodySize = 100 * 1024 * 1024;
-            
+
             // Maximum cache size (100 MB)
             options.SizeLimit = 100 * 1024 * 1024;
-            
+
             // Use case-sensitive paths for cache keys
             options.UseCaseSensitivePaths = false;
         });
     }
-    
+
     /// <summary>
     /// Configures request size limits for the application.
     /// </summary>
@@ -590,7 +626,7 @@ public static class ServiceConfiguration
             options.MaxRequestBodySize = maxRequestBodySizeBytes;
         });
     }
-    
+
     /// <summary>
     /// Configures authentication-related services.
     /// </summary>
@@ -607,19 +643,19 @@ public static class ServiceConfiguration
         services.AddScoped<GitHubTokenValidationService>();
         services.AddScoped<TokenValidationServiceFactory>();
         services.AddScoped<AuthService>();
-        
+
         // Configure PasswordResetService
         services.AddScoped<PasswordResetService>(sp =>
         {
             var frontendUrl = configuration["Frontend:BaseUrl"] ?? throw new InvalidOperationException("Frontend URL not configured");
             return new PasswordResetService(
-                sp.GetRequiredService<AppDbContext>(), 
+                sp.GetRequiredService<AppDbContext>(),
                 sp.GetRequiredService<RenderMjmlEmailService>(),
                 sp.GetRequiredService<PasswordValidator>(),
                 frontendUrl);
         });
     }
-    
+
     /// <summary>
     /// Configures JSON serialization options for ASP.NET Core controllers.
     /// </summary>
@@ -650,7 +686,7 @@ internal static class DatabaseConfigurationHelpers
     {
         var provider = configuration["Database:Provider"];
         var connectionString = configuration.GetConnectionString("DefaultConnection");
-        
+
         return string.Equals(provider, "InMemory", StringComparison.OrdinalIgnoreCase) ||
                string.Equals(connectionString, "InMemory", StringComparison.OrdinalIgnoreCase);
     }
@@ -658,29 +694,29 @@ internal static class DatabaseConfigurationHelpers
     internal static void UseInMemoryDatabase(IServiceCollection services, ILogger logger)
     {
         logger.LogInformation("Using in-memory database provider 'FallbackInMemoryDatabase'.");
-        services.AddDbContext<AppDbContext>(options => 
+        services.AddDbContext<AppDbContext>(options =>
             options.UseInMemoryDatabase("FallbackInMemoryDatabase"));
     }
 
     // ReSharper disable once IdentifierTypo
     internal static bool TryUsePostgreSql(
-        IServiceCollection services, 
-        IConfiguration configuration, 
-        string connectionString, 
+        IServiceCollection services,
+        IConfiguration configuration,
+        string connectionString,
         ILogger logger)
     {
         try
         {
             var (maxRetryCount, maxRetryDelaySeconds) = GetRetryPolicySettings(configuration);
-            
+
             // Test connection
             var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>()
-                .UseNpgsql(connectionString, npgsqlOptions => 
+                .UseNpgsql(connectionString, npgsqlOptions =>
                 {
                     npgsqlOptions.UseVector();
                     ConfigureRetryPolicy(npgsqlOptions, maxRetryCount, maxRetryDelaySeconds);
                 });
-            
+
             using var testContext = new AppDbContext(optionsBuilder.Options);
             if (!testContext.Database.CanConnect())
             {
@@ -690,22 +726,22 @@ internal static class DatabaseConfigurationHelpers
 
             // Connection successful - register PostgreSQL with retry policy
             logger.LogInformation(
-                "Successfully connected to PostgreSQL. Using PostgreSQL database provider with retry policy (MaxRetryCount: {MaxRetryCount}, MaxRetryDelay: {MaxRetryDelay}s).", 
+                "Successfully connected to PostgreSQL. Using PostgreSQL database provider with retry policy (MaxRetryCount: {MaxRetryCount}, MaxRetryDelay: {MaxRetryDelay}s).",
                 maxRetryCount, maxRetryDelaySeconds);
-            
+
             services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(connectionString, npgsqlOptions => 
+                options.UseNpgsql(connectionString, npgsqlOptions =>
                 {
                     npgsqlOptions.UseVector();
                     ConfigureRetryPolicy(npgsqlOptions, maxRetryCount, maxRetryDelaySeconds);
                 }));
-            
+
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, 
-                "Failed to connect to PostgreSQL database. Error: {ErrorMessage}. Falling back to in-memory database.", 
+            logger.LogError(ex,
+                "Failed to connect to PostgreSQL database. Error: {ErrorMessage}. Falling back to in-memory database.",
                 ex.Message);
             return false;
         }
@@ -721,8 +757,8 @@ internal static class DatabaseConfigurationHelpers
     }
 
     private static void ConfigureRetryPolicy(
-        Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder npgsqlOptions, 
-        int maxRetryCount, 
+        Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure.NpgsqlDbContextOptionsBuilder npgsqlOptions,
+        int maxRetryCount,
         int maxRetryDelaySeconds)
     {
         npgsqlOptions.EnableRetryOnFailure(

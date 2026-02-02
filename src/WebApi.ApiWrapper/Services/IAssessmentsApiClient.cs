@@ -32,4 +32,13 @@ public interface IAssessmentsApiClient
     /// <exception cref="Exceptions.ApiNotFoundException">Thrown when assessment is not found (404).</exception>
     /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
     Task<AssessmentDto> GetAssessmentByIdAsync(int id);
+
+    /// <summary>
+    /// Gets graph data for a specific assessment.
+    /// </summary>
+    /// <param name="id">The assessment ID</param>
+    /// <returns>The graph data with nodes and links</returns>
+    /// <exception cref="Exceptions.ApiNotFoundException">Thrown when assessment is not found (404).</exception>
+    /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
+    Task<GraphDataDto> GetAssessmentGraphAsync(int id);
 }

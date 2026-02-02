@@ -487,7 +487,7 @@ Always call the appropriate functions when users report symptoms or request acti
                 {
                     finalResponse = assistantMessage.Content;
                     Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})",
-                        turnCount, finalResponse.Length);
+                        turnCount, finalResponse?.Length ?? 0);
                     break;
                 }
 

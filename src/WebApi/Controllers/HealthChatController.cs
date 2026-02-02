@@ -185,13 +185,18 @@ public class HealthChatController : BaseController
         {
             var userId = GetUserId();
             
+            if (string.IsNullOrWhiteSpace(request.Message))
+            {
+                return this.BadRequestError("Message is required");
+            }
+
             logger.LogDebug("Received health chat message from user {UserId}. ConversationId: {ConversationId}, Message length: {MessageLength}", 
-                userId, request.ConversationId, request.Message?.Length ?? 0);
+                userId, request.ConversationId, request.Message.Length);
 
             // Orchestrate the entire health chat flow
             var (response, isNewConversation) = await orchestrator.ProcessHealthMessageAsync(
                 userId,
-                request.Message,
+                request.Message!,
                 request.ConversationId);
             
             logger.LogDebug("Processed health chat message. ConversationId: {ConversationId}, IsNewConversation: {IsNewConversation}", 

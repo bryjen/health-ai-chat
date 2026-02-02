@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using WebApi.Models;
@@ -13,7 +14,7 @@ namespace WebApi.Services.AI.Plugins;
 /// </summary>
 public class AssessmentPlugin(
     AssessmentRepository assessmentRepository,
-    ConversationContextService contextService,
+    ConversationContextService _,
     ILogger<AssessmentPlugin> logger)
 {
     private ConversationContext? _context;
@@ -39,7 +40,7 @@ public class AssessmentPlugin(
         [Description("Comma-separated list of alternative diagnoses")] string? differentials = null,
         [Description("Reasoning for this assessment")] string reasoning = "",
         [Description("Recommended action: self-care, see-gp, urgent-care, or emergency")] string recommendedAction = "see-gp",
-        [Description("Comma-separated list of episode IDs")] string? episodeIds = null,
+        [Description("JSON object mapping episode IDs to weights, e.g., {\"1\": 0.8, \"2\": 0.6}")] string? episodeWeights = null,
         [Description("Comma-separated list of negative finding IDs")] string? negativeFindingIds = null)
     {
         if (_context == null || !_conversationId.HasValue)
@@ -53,13 +54,55 @@ public class AssessmentPlugin(
                 ? differentials.Split(',').Select(d => d.Trim()).ToList()
                 : null;
 
-            var episodeIdsList = episodeIds != null
-                ? episodeIds.Split(',').Select(id => int.TryParse(id.Trim(), out var eid) ? eid : (int?)null).Where(id => id.HasValue).Select(id => id!.Value).ToList()
-                : _context.ActiveEpisodes.Select(e => e.Id).ToList();
-
             var negativeFindingIdsList = negativeFindingIds != null
                 ? negativeFindingIds.Split(',').Select(id => int.TryParse(id.Trim(), out var nid) ? nid : (int?)null).Where(id => id.HasValue).Select(id => id!.Value).ToList()
                 : _context.NegativeFindings.Select(nf => nf.Id).ToList();
+
+            // Parse episode weights from JSON object
+            Dictionary<int, decimal> episodeWeightsDict = new();
+            if (!string.IsNullOrWhiteSpace(episodeWeights))
+            {
+                try
+                {
+                    var weightsJson = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(episodeWeights);
+                    if (weightsJson != null)
+                    {
+                        foreach (var kvp in weightsJson)
+                        {
+                            if (int.TryParse(kvp.Key, out var episodeId))
+                            {
+                                try
+                                {
+                                    var weight = kvp.Value.GetDecimal();
+                                    episodeWeightsDict[episodeId] = Math.Clamp(weight, 0, 1);
+                                }
+                                catch
+                                {
+                                    // Skip invalid weight values
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogWarning(ex, "Failed to parse episodeWeights JSON: {EpisodeWeights}", episodeWeights);
+                }
+            }
+
+            // If no weights provided, use all active episodes with evenly distributed weights
+            if (episodeWeightsDict.Count == 0)
+            {
+                var activeEpisodes = _context.ActiveEpisodes.ToList();
+                if (activeEpisodes.Count > 0)
+                {
+                    var defaultWeight = 1.0m / activeEpisodes.Count;
+                    foreach (var episode in activeEpisodes)
+                    {
+                        episodeWeightsDict[episode.Id] = defaultWeight;
+                    }
+                }
+            }
 
             var assessment = new Assessment
             {
@@ -70,9 +113,19 @@ public class AssessmentPlugin(
                 Differentials = differentialsList,
                 Reasoning = reasoning,
                 RecommendedAction = recommendedAction,
-                EpisodeIds = episodeIdsList,
                 NegativeFindingIds = negativeFindingIdsList
             };
+
+            // Create AssessmentEpisodeLink records
+            foreach (var kvp in episodeWeightsDict)
+            {
+                assessment.LinkedEpisodes.Add(new AssessmentEpisodeLink
+                {
+                    EpisodeId = kvp.Key,
+                    Weight = kvp.Value,
+                    Reasoning = null
+                });
+            }
 
             var created = await assessmentRepository.CreateAssessmentAsync(assessment);
 
@@ -99,7 +152,7 @@ public class AssessmentPlugin(
         [Description("Updated comma-separated list of alternative diagnoses")] string? differentials = null,
         [Description("Updated reasoning")] string? reasoning = null,
         [Description("Updated recommended action")] string? recommendedAction = null,
-        [Description("Updated comma-separated list of episode IDs")] string? episodeIds = null,
+        [Description("Updated JSON object mapping episode IDs to weights, e.g., {\"1\": 0.8, \"2\": 0.6}")] string? episodeWeights = null,
         [Description("Updated comma-separated list of negative finding IDs")] string? negativeFindingIds = null)
     {
         if (_context == null)
@@ -115,16 +168,43 @@ public class AssessmentPlugin(
                 differentialsList = differentials.Split(',').Select(d => d.Trim()).ToList();
             }
 
-            List<int>? episodeIdsList = null;
-            if (episodeIds != null)
-            {
-                episodeIdsList = episodeIds.Split(',').Select(id => int.TryParse(id.Trim(), out var eid) ? eid : (int?)null).Where(id => id.HasValue).Select(id => id!.Value).ToList();
-            }
-
             List<int>? negativeFindingIdsList = null;
             if (negativeFindingIds != null)
             {
                 negativeFindingIdsList = negativeFindingIds.Split(',').Select(id => int.TryParse(id.Trim(), out var nid) ? nid : (int?)null).Where(id => id.HasValue).Select(id => id!.Value).ToList();
+            }
+
+            // Parse episode weights from JSON object if provided
+            Dictionary<int, decimal>? episodeWeightsDict = null;
+            if (!string.IsNullOrWhiteSpace(episodeWeights))
+            {
+                try
+                {
+                    var weightsJson = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(episodeWeights);
+                    if (weightsJson != null)
+                    {
+                        episodeWeightsDict = new Dictionary<int, decimal>();
+                        foreach (var kvp in weightsJson)
+                        {
+                            if (int.TryParse(kvp.Key, out var episodeId))
+                            {
+                                try
+                                {
+                                    var weight = kvp.Value.GetDecimal();
+                                    episodeWeightsDict[episodeId] = Math.Clamp(weight, 0, 1);
+                                }
+                                catch
+                                {
+                                    // Skip invalid weight values
+                                }
+                            }
+                        }
+                    }
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogWarning(ex, "Failed to parse episodeWeights JSON: {EpisodeWeights}", episodeWeights);
+                }
             }
 
             var updated = await assessmentRepository.UpdateAssessmentAsync(
@@ -134,7 +214,7 @@ public class AssessmentPlugin(
                 differentialsList,
                 reasoning,
                 recommendedAction,
-                episodeIdsList,
+                episodeWeightsDict,
                 negativeFindingIdsList);
 
             if (updated == null)
