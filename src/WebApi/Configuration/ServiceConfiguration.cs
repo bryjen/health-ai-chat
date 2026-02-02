@@ -115,7 +115,8 @@ public static class ServiceConfiguration
     }
 
     /// <summary>
-    /// Configures OpenAPI + Swagger.
+    /// Configures OpenAPI spec generation for Scalar UI.
+    /// Uses Swashbuckle to generate the OpenAPI specification that Scalar consumes.
     /// </summary>
     /// <param name="services">The service collection to configure.</param>
     /// <param name="configuration">The configuration instance to read version settings from.</param>
@@ -130,7 +131,7 @@ public static class ServiceConfiguration
             var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
             if (File.Exists(xmlPath))
             {
-                options.IncludeXmlComments(xmlPath);
+                options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
             }
 
             // Configure version information from appsettings
@@ -144,19 +145,19 @@ public static class ServiceConfiguration
                 Version = semanticVersion,
                 Description = $"API Version: {semanticVersion}"
             });
-            
-            // Add JWT Bearer authentication support
+
+            // Add JWT Bearer authentication support for Scalar UI
             options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
-                Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token in the text input below.\n\nExample: \"Bearer 12345abcdef\"",
+                Description = "JWT Authorization header using the Bearer scheme. Enter 'Bearer' [space] and then your token.\n\nExample: \"Bearer 12345abcdef\"",
                 Name = "Authorization",
                 In = ParameterLocation.Header,
                 Type = SecuritySchemeType.Http,
                 Scheme = "bearer",
                 BearerFormat = "JWT"
             });
-            
-            // Make JWT Bearer authentication available globally
+
+            // Make JWT Bearer authentication available globally for all endpoints
             options.AddSecurityRequirement(_ =>
             {
                 var schemeRef = new OpenApiSecuritySchemeReference("Bearer");

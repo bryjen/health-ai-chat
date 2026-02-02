@@ -9,15 +9,20 @@ using WebApi.Repositories;
 namespace WebApi.Controllers;
 
 /// <summary>
-/// Handles episode-related endpoints for symptom tracking
+/// Handles episode-related endpoints for symptom tracking.
+/// Provides access to symptom episodes with their timelines, severity, triggers, and resolution status.
 /// </summary>
 [Route("api/v1/episodes")]
 [Produces("application/json")]
 public class EpisodesController : BaseController
 {
     /// <summary>
-    /// Get active episodes for the current user
+    /// Retrieves active symptom episodes for the current authenticated user.
     /// </summary>
+    /// <param name="days">Number of days to look back for active episodes. Defaults to 14 days.</param>
+    /// <returns>List of active episodes with their details, timelines, and symptom information.</returns>
+    /// <response code="200">Active episodes retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
     [HttpGet("active")]
     [ProducesResponseType(typeof(List<EpisodeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -101,8 +106,13 @@ public class EpisodesController : BaseController
     }
 
     /// <summary>
-    /// Get a specific episode by ID
+    /// Retrieves a specific symptom episode by its unique identifier.
     /// </summary>
+    /// <param name="episodeId">The unique identifier of the episode.</param>
+    /// <returns>Complete episode details with symptom information and timeline.</returns>
+    /// <response code="200">Episode retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
+    /// <response code="404">Episode not found or does not belong to the current user.</response>
     [HttpGet("{episodeId}")]
     [ProducesResponseType(typeof(EpisodeDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]

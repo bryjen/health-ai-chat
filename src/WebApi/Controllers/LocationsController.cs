@@ -23,7 +23,7 @@ public class LocationsController : ControllerBase
     }
     
     /// <summary>
-    /// Gets all available countries.
+    /// Retrieves all available countries from the location database.
     /// </summary>
     /// <returns>List of all countries</returns>
     /// <response code="200">Returns the list of countries</response>
@@ -49,12 +49,13 @@ public class LocationsController : ControllerBase
     }
     
     /// <summary>
-    /// Gets all states/provinces for a specific country.
+    /// Retrieves all states or provinces for a specific country.
+    /// Returns administrative divisions within the specified country.
     /// </summary>
-    /// <param name="countryId">The country ID to get states for</param>
-    /// <returns>List of states for the specified country</returns>
-    /// <response code="200">Returns the list of states</response>
-    /// <response code="400">Invalid country ID</response>
+    /// <param name="countryId">The unique identifier of the country.</param>
+    /// <returns>List of states or provinces for the specified country.</returns>
+    /// <response code="200">States retrieved successfully.</response>
+    /// <response code="400">Invalid country ID or error loading states.</response>
     [HttpGet("states")]
     [ProducesResponseType(typeof(List<StateDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
@@ -78,12 +79,12 @@ public class LocationsController : ControllerBase
     }
     
     /// <summary>
-    /// Gets all cities for a specific state/province.
+    /// Retrieves all cities for a specific state or province.
     /// </summary>
-    /// <param name="stateId">The state ID to get cities for</param>
-    /// <returns>List of cities for the specified state</returns>
-    /// <response code="200">Returns the list of cities</response>
-    /// <response code="400">Invalid state ID</response>
+    /// <param name="stateId">The unique identifier of the state or province.</param>
+    /// <returns>List of cities for the specified state or province.</returns>
+    /// <response code="200">Cities retrieved successfully.</response>
+    /// <response code="400">Invalid state ID or error loading cities.</response>
     [HttpGet("cities")]
     [ProducesResponseType(typeof(List<CityDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]

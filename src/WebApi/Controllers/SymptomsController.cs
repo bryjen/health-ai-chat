@@ -7,15 +7,19 @@ using WebApi.Repositories;
 namespace WebApi.Controllers;
 
 /// <summary>
-/// Handles symptom-related endpoints
+/// Handles symptom-related endpoints.
+/// Provides access to user's tracked symptoms and their associated episode counts.
 /// </summary>
 [Route("api/v1/symptoms")]
 [Produces("application/json")]
 public class SymptomsController : BaseController
 {
     /// <summary>
-    /// Get all symptoms for the current user
+    /// Retrieves all symptoms tracked by the current authenticated user.
     /// </summary>
+    /// <returns>List of symptoms with their details and episode counts.</returns>
+    /// <response code="200">Symptoms retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
     [HttpGet]
     [ProducesResponseType(typeof(List<SymptomDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

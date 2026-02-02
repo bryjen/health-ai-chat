@@ -8,15 +8,21 @@ using WebApi.Services.Graph;
 namespace WebApi.Controllers;
 
 /// <summary>
-/// Handles assessment-related endpoints
+/// Handles medical assessment endpoints.
+/// Provides access to AI-generated health assessments, differential diagnoses, and recommended actions for conversations.
 /// </summary>
 [Route("api/v1/assessments")]
 [Produces("application/json")]
 public class AssessmentsController : BaseController
 {
     /// <summary>
-    /// Get assessment for a specific conversation
+    /// Retrieves the medical assessment associated with a specific conversation.
     /// </summary>
+    /// <param name="conversationId">The unique identifier of the conversation.</param>
+    /// <returns>Assessment details including hypothesis, confidence, differentials, reasoning, and recommended actions.</returns>
+    /// <response code="200">Assessment retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
+    /// <response code="404">Assessment not found or does not belong to the current user.</response>
     [HttpGet("conversation/{conversationId}")]
     [ProducesResponseType(typeof(AssessmentDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -58,8 +64,12 @@ public class AssessmentsController : BaseController
     }
 
     /// <summary>
-    /// Get recent assessments for the current user
+    /// Retrieves the most recent medical assessments for the current authenticated user.
     /// </summary>
+    /// <param name="limit">Maximum number of assessments to return. Defaults to 10.</param>
+    /// <returns>List of recent assessments with their details.</returns>
+    /// <response code="200">Recent assessments retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
     [HttpGet("recent")]
     [ProducesResponseType(typeof(List<AssessmentDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -95,7 +105,7 @@ public class AssessmentsController : BaseController
     }
 
     /// <summary>
-    /// Get assessment by ID
+    /// Retrieves a specific medical assessment by its unique identifier.
     /// </summary>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(AssessmentDto), StatusCodes.Status200OK)]
@@ -138,8 +148,13 @@ public class AssessmentsController : BaseController
     }
 
     /// <summary>
-    /// Get graph data for a specific assessment
+    /// Retrieves graph visualization data for a specific assessment.
     /// </summary>
+    /// <param name="id">The unique identifier of the assessment.</param>
+    /// <returns>Graph data containing nodes and edges for visualization.</returns>
+    /// <response code="200">Graph data retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
+    /// <response code="404">Assessment not found or does not belong to the current user.</response>
     [HttpGet("{id}/graph")]
     [ProducesResponseType(typeof(GraphDataDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]

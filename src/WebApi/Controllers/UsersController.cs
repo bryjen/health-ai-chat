@@ -8,11 +8,22 @@ using WebApi.Services.Auth;
 
 namespace WebApi.Controllers;
 
+/// <summary>
+/// Handles user profile management endpoints.
+/// Provides access to retrieve and update the authenticated user's profile information.
+/// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
 [Authorize]
 public class UsersController : ControllerBase
 {
+    /// <summary>
+    /// Retrieves the profile information of the currently authenticated user.
+    /// </summary>
+    /// <returns>Complete user profile information.</returns>
+    /// <response code="200">User profile retrieved successfully.</response>
+    /// <response code="401">User not authenticated or invalid token.</response>
+    /// <response code="404">User not found in the system.</response>
     [HttpGet("me")]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
@@ -38,6 +49,15 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Updates the profile information of the currently authenticated user.
+    /// </summary>
+    /// <param name="request">The updated profile information.</param>
+    /// <returns>The updated user profile information.</returns>
+    /// <response code="200">User profile updated successfully.</response>
+    /// <response code="400">Invalid input data or validation failed.</response>
+    /// <response code="401">User not authenticated or invalid token.</response>
+    /// <response code="404">User not found in the system.</response>
     [HttpPut("me")]
     [ProducesResponseType(typeof(UserProfileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status400BadRequest)]
