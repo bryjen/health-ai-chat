@@ -2,7 +2,9 @@
 @Render
 
 @* ReSharper disable once UnusedParameter.Local *@
+
 @code {
+
     private RenderFragment Render => __builder =>
     {
         <div class="min-h-14 bg-card border-b border-border">
@@ -27,16 +29,16 @@
         string displayName,
         RenderFragment icon)
         => __builder =>
-    {
-        <div class="px-3 py-1">
-            <NavLink
-                href="@href"
-                class="flex items-center w-full px-4 py-2.5 transition-all duration-200 ease-in-out bg-card hover:brightness-150 text-foreground rounded-md font-medium gap-2 no-underline">
-                @icon
-                <span class="text-sm">@displayName</span>
-            </NavLink>
-        </div>
-    };
+        {
+            <div class="px-3 py-1">
+                <NavLink
+                    href="@href"
+                    class="flex items-center w-full px-4 py-2.5 transition-all duration-200 ease-in-out bg-card hover:brightness-150 text-foreground rounded-md font-medium gap-2 no-underline">
+                    @icon
+                    <span class="text-sm">@displayName</span>
+                </NavLink>
+            </div>
+        };
 
     private RenderFragment RenderAuthorizedPanel => __builder =>
     {
@@ -134,7 +136,7 @@
                                     class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md opacity-0 group-hover/item:opacity-100 hover:opacity-100 hover:bg-muted transition-opacity z-10"
                                     title="More options">
                                     <svg class="w-4 h-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
                                     </svg>
                                 </button>
                             </DropdownMenuTrigger>
@@ -148,7 +150,7 @@
                                 <DropdownMenuItem Disabled>
                                     Add to project
                                 </DropdownMenuItem>
-                                <DropdownMenuSeparator />
+                                <DropdownMenuSeparator/>
                                 <DropdownMenuItem Variant="destructive" OnClick="() => HandleDeleteConversation(conversation.Id)">
                                     Delete
                                 </DropdownMenuItem>
@@ -163,7 +165,7 @@
     private RenderFragment RenderFooter => __builder =>
     {
         <div class="border-t border-border p-2 mt-auto">
-            <UserNav />
+            <UserNav/>
         </div>
     };
 
@@ -179,10 +181,11 @@
             <DropdownMenuItem Disabled>
                 Add to project
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator/>
             <DropdownMenuItem Variant="destructive" OnClick="() => HandleDeleteConversation(conversationId)">
                 Delete
             </DropdownMenuItem>
         </DropdownMenuContent>
     };
+
 }

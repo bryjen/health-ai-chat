@@ -1,7 +1,5 @@
-@namespace WebFrontend.Components.Chat.StatusBubbles
+@namespace WebFrontend.Components.Core.Chat.StatusBubbles
 @using WebFrontend.Components.UI.Shared
-@using WebFrontend.Models.Chat.StatusTypes
-@using Microsoft.AspNetCore.Components
 
 <div class="@GetClasses" @onclick="@(Status.AssessmentId > 0 ? NavigateToAssessment : (Action)(() => { }))">
     <span class="material-symbols-outlined text-sm text-green-400">assessment</span>
@@ -22,7 +20,7 @@
 
     [Parameter]
     public required AssessmentCreatedStatus Status { get; set; }
-    
+
     [Inject]
     private NavigationManager Navigation { get; set; } = default!;
 

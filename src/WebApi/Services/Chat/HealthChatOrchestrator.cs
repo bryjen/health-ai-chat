@@ -63,8 +63,8 @@ public class HealthChatOrchestrator(
 
         // Merge real-time status updates with EntityChanges-based statuses
         var statusInformationJson = SerializeStatusInformation(
-            symptomChanges, 
-            appointmentChanges, 
+            symptomChanges,
+            appointmentChanges,
             assessmentChanges,
             routedResponse.StatusUpdatesSent);
 
@@ -100,13 +100,15 @@ public class HealthChatOrchestrator(
         if (conversationId.HasValue)
         {
             // Continue existing conversation
-            logger.LogDebug("Looking up existing conversation {ConversationId} for user {UserId}", conversationId.Value, userId);
+            logger.LogDebug("Looking up existing conversation {ConversationId} for user {UserId}", conversationId.Value,
+                userId);
             var conversation = await context.Conversations
                 .FirstOrDefaultAsync(c => c.Id == conversationId.Value && c.UserId == userId);
 
             if (conversation == null)
             {
-                logger.LogWarning("Conversation {ConversationId} not found for user {UserId}", conversationId.Value, userId);
+                logger.LogWarning("Conversation {ConversationId} not found for user {UserId}", conversationId.Value,
+                    userId);
                 throw new NotFoundException("Conversation not found");
             }
 
@@ -171,13 +173,13 @@ public class HealthChatOrchestrator(
     }
 
     private static string? SerializeStatusInformation(
-        List<EntityChange> symptomChanges, 
+        List<EntityChange> symptomChanges,
         List<EntityChange> appointmentChanges,
         List<EntityChange> assessmentChanges,
         List<object>? realTimeStatusUpdates = null)
     {
         // Include real-time status updates even if no EntityChanges
-        if (!symptomChanges.Any() && !appointmentChanges.Any() && !assessmentChanges.Any() && 
+        if (!symptomChanges.Any() && !appointmentChanges.Any() && !assessmentChanges.Any() &&
             (realTimeStatusUpdates == null || !realTimeStatusUpdates.Any()))
         {
             return null;
@@ -201,6 +203,7 @@ public class HealthChatOrchestrator(
                             timestamp = DateTime.UtcNow
                         });
                     }
+
                     break;
 
                 case "updated":
@@ -236,9 +239,10 @@ public class HealthChatOrchestrator(
                     if (int.TryParse(change.Id, out var assessmentId))
                     {
                         // Check if we already have this from real-time updates
-                        var alreadyExists = realTimeStatusUpdates?.Any(s => 
-                            System.Text.Json.JsonSerializer.Serialize(s).Contains($"\"assessmentId\":{assessmentId}")) == true;
-                        
+                        var alreadyExists = realTimeStatusUpdates?.Any(s =>
+                            System.Text.Json.JsonSerializer.Serialize(s)
+                                .Contains($"\"assessmentId\":{assessmentId}")) == true;
+
                         if (!alreadyExists)
                         {
                             statusList.Add(new
@@ -251,23 +255,24 @@ public class HealthChatOrchestrator(
                             });
                         }
                     }
+
                     break;
             }
         }
 
-        // Add real-time status updates (assessment-generating, assessment-complete, assessment-analyzing, assessment-created)
+        // Add real-time status updates (assessment-generating, assessment-analyzing, assessment-created)
         // These are sent during processing and should be persisted
         // Sort them by type order first, then timestamp to maintain correct order
         if (realTimeStatusUpdates != null && realTimeStatusUpdates.Any())
         {
-            // Sort real-time updates by type order (generating -> created -> analyzing -> complete) then timestamp
+            // Sort real-time updates by type order (generating -> created -> analyzing) then timestamp
             var sortedUpdates = realTimeStatusUpdates
                 .Select(update =>
                 {
                     var json = JsonSerializer.Serialize(update);
                     using var doc = JsonDocument.Parse(json);
-                    var timestamp = doc.RootElement.TryGetProperty("timestamp", out var ts) 
-                        ? ts.GetDateTime() 
+                    var timestamp = doc.RootElement.TryGetProperty("timestamp", out var ts)
+                        ? ts.GetDateTime()
                         : DateTime.UtcNow;
                     var type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : "";
                     var typeOrder = type switch
@@ -275,7 +280,6 @@ public class HealthChatOrchestrator(
                         "assessment-generating" => 1,
                         "assessment-created" => 2,
                         "assessment-analyzing" => 3,
-                        "assessment-complete" => 4, // Keep for backwards compatibility
                         _ => 5
                     };
                     return new { Update = update, Timestamp = timestamp, TypeOrder = typeOrder };
@@ -290,11 +294,11 @@ public class HealthChatOrchestrator(
                 // Deserialize to check type and avoid duplicates
                 var statusJson = JsonSerializer.Serialize(statusUpdate);
                 using var doc = JsonDocument.Parse(statusJson);
-                
+
                 if (doc.RootElement.TryGetProperty("type", out var typeElement))
                 {
                     var type = typeElement.GetString();
-                    
+
                     // Only add if not already present (avoid duplicates with EntityChanges)
                     if (type == "assessment-created")
                     {
@@ -303,7 +307,7 @@ public class HealthChatOrchestrator(
                         if (doc.RootElement.TryGetProperty("assessmentId", out var idElement))
                         {
                             var id = idElement.GetInt32();
-                            var alreadyExists = statusList.Any(s => 
+                            var alreadyExists = statusList.Any(s =>
                                 System.Text.Json.JsonSerializer.Serialize(s).Contains($"\"assessmentId\":{id}"));
                             if (!alreadyExists)
                             {
@@ -328,9 +332,10 @@ public class HealthChatOrchestrator(
                             {
                                 return sType.GetString() == type;
                             }
+
                             return false;
                         });
-                        
+
                         if (!alreadyExists)
                         {
                             statusList.Add(statusUpdate);
@@ -358,8 +363,8 @@ public class HealthChatOrchestrator(
         // Find episodes created or updated in the last 30 seconds (should cover the AI processing time)
         var recentCutoff = DateTime.UtcNow.AddSeconds(-30);
         var recentEpisodes = await context.Episodes
-            .Where(e => e.UserId == userId && 
-                       (e.CreatedAt >= recentCutoff || e.UpdatedAt >= recentCutoff))
+            .Where(e => e.UserId == userId &&
+                        (e.CreatedAt >= recentCutoff || e.UpdatedAt >= recentCutoff))
             .Include(e => e.Symptom)
             .ToListAsync();
 
@@ -391,9 +396,9 @@ public class HealthChatOrchestrator(
 
         // Also check for resolved episodes
         var resolvedEpisodes = await context.Episodes
-            .Where(e => e.UserId == userId && 
-                       e.Status == "resolved" && 
-                       e.ResolvedAt >= recentCutoff)
+            .Where(e => e.UserId == userId &&
+                        e.Status == "resolved" &&
+                        e.ResolvedAt >= recentCutoff)
             .Include(e => e.Symptom)
             .ToListAsync();
 
@@ -423,8 +428,8 @@ public class HealthChatOrchestrator(
         // Find appointments created or updated in the last 30 seconds (should cover the AI processing time)
         var recentCutoff = DateTime.UtcNow.AddSeconds(-30);
         var recentAppointments = await context.Appointments
-            .Where(a => a.UserId == userId && 
-                       (a.CreatedAt >= recentCutoff || a.UpdatedAt >= recentCutoff))
+            .Where(a => a.UserId == userId &&
+                        (a.CreatedAt >= recentCutoff || a.UpdatedAt >= recentCutoff))
             .ToListAsync();
 
         foreach (var appointment in recentAppointments)
@@ -463,9 +468,9 @@ public class HealthChatOrchestrator(
         // Find assessments created in the last 30 seconds
         var recentCutoff = DateTime.UtcNow.AddSeconds(-30);
         var recentAssessments = await context.Assessments
-            .Where(a => a.UserId == userId && 
-                       a.ConversationId == conversationId &&
-                       a.CreatedAt >= recentCutoff)
+            .Where(a => a.UserId == userId &&
+                        a.ConversationId == conversationId &&
+                        a.CreatedAt >= recentCutoff)
             .ToListAsync();
 
         foreach (var assessment in recentAssessments)
@@ -506,7 +511,8 @@ public class HealthChatOrchestrator(
             List<object> statusUpdatesSent = new();
             if (scenario is HealthChatScenario healthChatScenario)
             {
-                response = await healthChatScenario.ExecuteAsyncInternal(request, cancellationToken, statusUpdateService);
+                response = await healthChatScenario.ExecuteAsyncInternal(request, cancellationToken,
+                    statusUpdateService);
                 statusUpdatesSent = response.StatusUpdatesSent ?? new List<object>();
             }
             else
@@ -516,10 +522,10 @@ public class HealthChatOrchestrator(
 
             // Parse JSON response
             var parsedResponse = ParseHealthResponse(response.Message);
-            
+
             // Store status updates for later persistence
             parsedResponse.StatusUpdatesSent = statusUpdatesSent;
-            
+
             return parsedResponse;
         }
         catch (Exception ex)
@@ -558,7 +564,7 @@ public class HealthChatOrchestrator(
         {
             var jsonText = ExtractJsonFromResponse(responseText);
             using var doc = JsonDocument.Parse(jsonText);
-            
+
             if (doc.RootElement.TryGetProperty("message", out var messageElement))
             {
                 var messageText = messageElement.GetString();
@@ -582,13 +588,13 @@ public class HealthChatOrchestrator(
         // Final fallback: if response contains JSON-like structure, try to extract message field
         // Otherwise return the response as-is but clean it up
         var cleanedResponse = responseText.Trim();
-        
+
         // Remove any trailing JSON if message text appears before it
         var messageMatch = System.Text.RegularExpressions.Regex.Match(
-            cleanedResponse, 
+            cleanedResponse,
             @"""message""\s*:\s*""([^""]+)""",
             System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        
+
         if (messageMatch.Success && messageMatch.Groups.Count > 1)
         {
             var extractedMessage = messageMatch.Groups[1].Value;
@@ -603,7 +609,8 @@ public class HealthChatOrchestrator(
         }
 
         // Last resort: return cleaned response (but log warning)
-        logger.LogWarning("Could not parse JSON response, returning raw text. Response length: {Length}", responseText.Length);
+        logger.LogWarning("Could not parse JSON response, returning raw text. Response length: {Length}",
+            responseText.Length);
         return new HealthAssistantResponse
         {
             Message = cleanedResponse,
@@ -621,26 +628,29 @@ public class HealthChatOrchestrator(
         {
             json = json.Substring(7);
         }
+
         if (json.StartsWith("```", StringComparison.OrdinalIgnoreCase))
         {
             json = json.Substring(3);
         }
+
         if (json.EndsWith("```", StringComparison.OrdinalIgnoreCase))
         {
             json = json.Substring(0, json.Length - 3);
         }
+
         json = json.Trim();
 
         // Try to find JSON object boundaries if JSON is mixed with text
         // Look for first { and last } to extract just the JSON object
         var firstBrace = json.IndexOf('{');
         var lastBrace = json.LastIndexOf('}');
-        
+
         if (firstBrace >= 0 && lastBrace > firstBrace)
         {
             // Extract just the JSON object part
             var jsonObject = json.Substring(firstBrace, lastBrace - firstBrace + 1);
-            
+
             // Verify it's valid JSON by trying to parse it
             try
             {

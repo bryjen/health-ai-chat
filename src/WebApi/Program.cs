@@ -71,7 +71,7 @@ builder.Services.AddScoped<IStatusUpdateService, StatusUpdateService>();
 var app = builder.Build();
 
 // validate options on startup -> fast fail
-ValidateConfigurationOnStartup(app.Services, app.Environment, app.Logger);  
+ValidateConfigurationOnStartup(app.Services, app.Environment, app.Logger);
 
 // request/response logging, must be before GlobalExceptionHandlerMiddleware so it can capture error responses
 app.UseMiddleware<RequestLoggingMiddleware>();
@@ -150,7 +150,8 @@ using (var scope = app.Services.CreateScope())
             {
                 db.Database.Migrate();
             }
-            catch (Exception ex) when (ex.Message.Contains("pending changes") || ex.Message.Contains("PendingModelChanges"))
+            catch (Exception ex) when (ex.Message.Contains("pending changes") ||
+                                       ex.Message.Contains("PendingModelChanges"))
             {
                 // Migration pending - this is expected during development when model changes haven't been migrated yet
                 // In production, migrations should be applied via CI/CD or manual process
@@ -162,4 +163,6 @@ using (var scope = app.Services.CreateScope())
 app.Run();
 
 // Make the implicit Program class public for testing
-public partial class Program { }
+public partial class Program
+{
+}

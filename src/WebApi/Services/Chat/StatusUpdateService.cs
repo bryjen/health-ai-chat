@@ -11,7 +11,6 @@ public interface IStatusUpdateService
 {
     Task SendStatusUpdateAsync(string connectionId, object statusData);
     Task SendGeneratingAssessmentAsync(string connectionId);
-    Task SendAssessmentCompleteAsync(string connectionId);
     Task SendAnalyzingAssessmentAsync(string connectionId);
     Task SendAssessmentCreatedAsync(string connectionId, int assessmentId, string hypothesis, decimal confidence);
 }
@@ -49,17 +48,6 @@ public class StatusUpdateService : IStatusUpdateService
         {
             type = "assessment-generating",
             message = "Generating assessment...",
-            timestamp = DateTime.UtcNow
-        };
-        await SendStatusUpdateAsync(connectionId, status);
-    }
-
-    public async Task SendAssessmentCompleteAsync(string connectionId)
-    {
-        var status = new
-        {
-            type = "assessment-complete",
-            message = "Assessment complete",
             timestamp = DateTime.UtcNow
         };
         await SendStatusUpdateAsync(connectionId, status);

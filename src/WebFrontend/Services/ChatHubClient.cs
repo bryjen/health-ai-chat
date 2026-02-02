@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.JSInterop;
 using Web.Common.DTOs.Health;
 using WebFrontend.Models.Chat;
 using WebApi.ApiWrapper.Services;
@@ -11,10 +10,9 @@ namespace WebFrontend.Services;
 /// Concrete client for the health chat SignalR hub.
 /// Manages the hub connection and sending messages.
 /// </summary>
-public class ChatHubClient : IAsyncDisposable
+public class ChatHubClient(ITokenProvider tokenProvider)
+    : IAsyncDisposable
 {
-    private readonly ITokenProvider _tokenProvider;
-    private readonly IJSRuntime? _jsRuntime;
     private HubConnection? _hubConnection;
 
     // TODO: consider moving this to configuration if needed
@@ -24,100 +22,74 @@ public class ChatHubClient : IAsyncDisposable
 
     public event Func<StatusInformation, Task>? StatusUpdateReceived;
 
-    public ChatHubClient(ITokenProvider tokenProvider, IJSRuntime? jsRuntime = null)
-    {
-        _tokenProvider = tokenProvider;
-        _jsRuntime = jsRuntime;
-    }
-
-    private async Task LogToConsoleAsync(string message)
-    {
-        try
-        {
-            if (_jsRuntime != null)
-            {
-                await _jsRuntime.InvokeVoidAsync("console.log", message);
-            }
-        }
-        catch
-        {
-            // Ignore JS errors - logging is not critical
-        }
-    }
-
     public async Task ConnectAsync()
     {
         if (_hubConnection is { State: HubConnectionState.Connected })
         {
-            await LogToConsoleAsync("[SignalR] Already connected");
             return;
         }
 
         if (_hubConnection == null)
         {
-            await LogToConsoleAsync("[SignalR] Creating new hub connection");
             _hubConnection = new HubConnectionBuilder()
                 .WithUrl(HubUrl, options =>
                 {
-                    options.AccessTokenProvider = async () => await _tokenProvider.GetTokenAsync();
+                    options.AccessTokenProvider = async () => await tokenProvider.GetTokenAsync();
                 })
-                .WithAutomaticReconnect()
+                .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) })
                 .Build();
-            
-            // Log connection state changes
-            _hubConnection.Closed += async (error) =>
-            {
-                await LogToConsoleAsync($"[SignalR] Connection closed. Error: {error?.Message ?? "None"}");
-            };
-            
-            _hubConnection.Reconnecting += async (error) =>
-            {
-                await LogToConsoleAsync($"[SignalR] Reconnecting. Error: {error?.Message ?? "None"}");
-            };
-            
-            _hubConnection.Reconnected += async (connectionId) =>
-            {
-                await LogToConsoleAsync($"[SignalR] Reconnected. ConnectionId: {connectionId}");
-            };
 
             // Register status update listener
             _hubConnection.On<string>("StatusUpdate", async (statusJson) =>
             {
-                // Debug logging for SignalR status updates
-                await LogToConsoleAsync($"[SignalR] StatusUpdate received: {statusJson}");
-                
                 var status = DeserializeStatusInformation(statusJson);
-                if (status != null)
+                if (status != null && StatusUpdateReceived != null)
                 {
-                    var statusType = status switch
-                    {
-                        Models.Chat.StatusTypes.AssessmentGeneratingStatus => "assessment-generating",
-                        Models.Chat.StatusTypes.AssessmentCompleteStatus => "assessment-complete",
-                        Models.Chat.StatusTypes.AssessmentCreatedStatus => "assessment-created",
-                        Models.Chat.StatusTypes.AssessmentAnalyzingStatus => "assessment-analyzing",
-                        _ => "unknown"
-                    };
-                    await LogToConsoleAsync($"[SignalR] Deserialized status type: {statusType}, Timestamp: {status.Timestamp:HH:mm:ss.fff}");
-                    
-                    if (StatusUpdateReceived != null)
-                    {
-                        await LogToConsoleAsync($"[SignalR] Invoking StatusUpdateReceived handler for: {statusType}");
-                        await StatusUpdateReceived(status);
-                        await LogToConsoleAsync($"[SignalR] StatusUpdateReceived handler completed for: {statusType}");
-                    }
-                }
-                else
-                {
-                    await LogToConsoleAsync($"[SignalR] Failed to deserialize status update");
+                    await StatusUpdateReceived(status);
                 }
             });
         }
 
-        if (_hubConnection.State == HubConnectionState.Disconnected)
+        // Handle different connection states
+        var currentState = _hubConnection.State;
+
+        if (currentState == HubConnectionState.Disconnected)
         {
-            await LogToConsoleAsync("[SignalR] Starting connection...");
-            await _hubConnection.StartAsync();
-            await LogToConsoleAsync($"[SignalR] Connection started. State: {_hubConnection.State}");
+            try
+            {
+                await _hubConnection.StartAsync();
+            }
+            catch (Exception)
+            {
+                throw;
+            }
+        }
+        else if (currentState == HubConnectionState.Reconnecting)
+        {
+            // Wait for automatic reconnect to complete (with timeout)
+            var timeout = TimeSpan.FromSeconds(30);
+            var startTime = DateTime.UtcNow;
+            while (_hubConnection.State == HubConnectionState.Reconnecting && DateTime.UtcNow - startTime < timeout)
+            {
+                await Task.Delay(500);
+            }
+
+            // If still reconnecting after timeout, force stop and restart
+            if (_hubConnection.State == HubConnectionState.Reconnecting)
+            {
+                try
+                {
+                    await _hubConnection.StopAsync();
+                }
+                catch
+                {
+                    // Ignore errors when stopping
+                }
+
+                // Wait a bit then start fresh
+                await Task.Delay(1000);
+                await _hubConnection.StartAsync();
+            }
         }
     }
 
@@ -128,9 +100,7 @@ public class ChatHubClient : IAsyncDisposable
             throw new InvalidOperationException("Chat connection is not established.");
         }
 
-        await LogToConsoleAsync($"[SignalR] Sending message. ConversationId: {conversationId}");
         var response = await _hubConnection.InvokeAsync<HealthChatResponse>("SendMessage", message, conversationId);
-        await LogToConsoleAsync($"[SignalR] Message response received. ConversationId: {response.ConversationId}");
         return response;
     }
 
@@ -148,7 +118,7 @@ public class ChatHubClient : IAsyncDisposable
             }
         }
     }
-    
+
     private static StatusInformation? DeserializeStatusInformation(string statusJson)
     {
         try
@@ -174,11 +144,6 @@ public class ChatHubClient : IAsyncDisposable
                 "assessment-generating" => new Models.Chat.StatusTypes.AssessmentGeneratingStatus
                 {
                     Message = element.TryGetProperty("message", out var msg) ? msg.GetString() ?? "Generating assessment..." : "Generating assessment...",
-                    Timestamp = timestamp
-                },
-                "assessment-complete" => new Models.Chat.StatusTypes.AssessmentCompleteStatus
-                {
-                    Message = element.TryGetProperty("message", out var msg) ? msg.GetString() ?? "Assessment complete" : "Assessment complete",
                     Timestamp = timestamp
                 },
                 "assessment-analyzing" => new Models.Chat.StatusTypes.AssessmentAnalyzingStatus

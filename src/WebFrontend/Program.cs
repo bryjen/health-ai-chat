@@ -161,8 +161,7 @@ builder.Services.AddScoped<IOAuthProvider, GitHubOAuthProvider>();
 builder.Services.AddScoped<ChatHubClient>(sp =>
 {
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    var jsRuntime = sp.GetRequiredService<IJSRuntime>();
-    return new ChatHubClient(tokenProvider, jsRuntime);
+    return new ChatHubClient(tokenProvider);
 });
 
 // Register dropdown service

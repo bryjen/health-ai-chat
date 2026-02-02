@@ -58,6 +58,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
 
         try
         {
+            // Connect SignalR first so IsConnected is true quickly
             await ChatHubClient.ConnectAsync();
             
             // Subscribe to status updates
@@ -69,21 +70,20 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             // Load conversation after connection is established
             await HandleConversationParameterChange();
         }
-        catch (Exception ex)
+        catch
         {
             // Handle connection error - could show error message to user
-            // Error handling - no console logging needed
+            // Still try to load conversation even if SignalR fails
+            await HandleConversationParameterChange();
         }
     }
 
     protected override async Task OnParametersSetAsync()
     {
         // Handle conversation parameter changes (when clicking different conversations)
-        // Only process if SignalR is connected
-        if (ChatHubClient.IsConnected)
-        {
-            await HandleConversationParameterChange();
-        }
+        // Always process parameter changes, even if SignalR isn't connected yet
+        // We can still load conversation data from the API
+        await HandleConversationParameterChange();
     }
 
     private async Task HandleConversationParameterChange()
@@ -108,8 +108,9 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             return;
         }
 
-        // Only load if it's a different conversation than what's currently loaded
-        if (conversationId != _lastLoadedConversationId)
+        // Always reload if it's a different conversation, or if we don't have messages loaded
+        // This ensures navigation back works correctly
+        if (conversationId != _lastLoadedConversationId || Messages.Count == 0)
         {
             await LoadConversationAsync(conversationId);
         }
@@ -120,7 +121,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         try
         {
             IsLoading = true;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
 
             var conversation = await ConversationsApiClient.GetConversationByIdAsync(conversationId);
 
@@ -155,7 +156,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         finally
         {
             IsLoading = false;
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
             // Scrolling handled by ChatMessageList component after render
         }
     }
@@ -172,13 +173,10 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         _syncContext = SynchronizationContext.Current;
         _renderLoopCancellation = new CancellationTokenSource();
         _renderLoopTask = Task.Run(async () => await RenderLoopAsync(_renderLoopCancellation.Token));
-        _ = JS.InvokeVoidAsync("console.log", "[Chat] Started debounced render loop");
     }
     
     private async Task RenderLoopAsync(CancellationToken cancellationToken)
     {
-        await JS.InvokeVoidAsync("console.log", "[Chat] Render loop started");
-        
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -197,8 +195,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 // If we processed any updates, trigger a render
                 if (processedAny)
                 {
-                    await JS.InvokeVoidAsync("console.log", $"[Chat] Render loop processed {processedCount} status updates, triggering render");
-                    
                     // Post to UI thread via sync context
                     if (_syncContext != null)
                     {
@@ -208,7 +204,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                             _ = InvokeAsync(() =>
                             {
                                 StateHasChanged();
-                                _ = JS.InvokeVoidAsync("console.log", "[Chat] StateHasChanged called from render loop");
                                 return Task.CompletedTask;
                             });
                             tcs.SetResult();
@@ -219,14 +214,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     {
                         // Fallback: try InvokeAsync directly
                         await InvokeAsync(StateHasChanged);
-                        await JS.InvokeVoidAsync("console.log", "[Chat] StateHasChanged called from render loop (fallback)");
                     }
-                }
-                
-                // Log queue size periodically (every 10 iterations = ~500ms)
-                if (DateTime.Now.Millisecond % 500 < 50)
-                {
-                    await JS.InvokeVoidAsync("console.log", $"[Chat] Render loop: Queue size = {_statusUpdateQueue.Count}, Processing message exists = {_currentProcessingMessage != null}");
                 }
                 
                 // Debounce: wait 50ms before next check (max 20fps)
@@ -234,32 +222,17 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             }
             catch (OperationCanceledException)
             {
-                await JS.InvokeVoidAsync("console.log", "[Chat] Render loop cancelled");
                 break;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                await JS.InvokeVoidAsync("console.log", $"[Chat] Render loop error: {ex.Message}");
                 // Continue loop even on error
             }
         }
-        
-        await JS.InvokeVoidAsync("console.log", "[Chat] Render loop stopped");
     }
     
     private async Task ProcessStatusUpdateAsync(StatusInformation status)
     {
-        var statusType = status switch
-        {
-            AssessmentGeneratingStatus => "assessment-generating",
-            AssessmentCompleteStatus => "assessment-complete",
-            AssessmentCreatedStatus => "assessment-created",
-            AssessmentAnalyzingStatus => "assessment-analyzing",
-            _ => "unknown"
-        };
-        
-        await JS.InvokeVoidAsync("console.log", $"[Chat] ProcessStatusUpdate: {statusType}, Timestamp: {status.Timestamp:HH:mm:ss.fff}");
-        
         if (_currentProcessingMessage != null)
         {
             _currentStatusUpdates.Add(status);
@@ -270,15 +243,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 .ThenBy(s => s.Timestamp)
                 .ToList();
             
-            await JS.InvokeVoidAsync("console.log", $"[Chat] ProcessStatusUpdate: Sorted {sortedStatuses.Count} statuses - {string.Join(" -> ", sortedStatuses.Select(s => s switch
-            {
-                AssessmentGeneratingStatus => "generating",
-                AssessmentCompleteStatus => "complete",
-                AssessmentCreatedStatus => "created",
-                AssessmentAnalyzingStatus => "analyzing",
-                _ => "other"
-            }))}");
-            
             // Always create new list instance to ensure Blazor detects change
             _currentProcessingMessage.StatusInformation = new List<StatusInformation>(sortedStatuses);
             
@@ -288,17 +252,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             {
                 _currentProcessingMessage.Content = string.Empty; // Mark as added but keep content empty
                 Messages.Add(_currentProcessingMessage);
-                await JS.InvokeVoidAsync("console.log", $"[Chat] ProcessStatusUpdate: Added processing message to UI with {sortedStatuses.Count} statuses");
             }
-            else if (_currentProcessingMessage.Content != null)
-            {
-                // Message already added, statuses will be updated via new list instance
-                await JS.InvokeVoidAsync("console.log", $"[Chat] ProcessStatusUpdate: Updated existing processing message with {sortedStatuses.Count} statuses");
-            }
-        }
-        else
-        {
-            await JS.InvokeVoidAsync("console.log", $"[Chat] ProcessStatusUpdate: _currentProcessingMessage is null, ignoring status update");
         }
     }
 
@@ -339,9 +293,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
 
         try
         {
-            await JS.InvokeVoidAsync("console.log", $"[Chat] Sending message. CurrentStatusUpdates count: {_currentStatusUpdates.Count}");
             var response = await ChatHubClient.SendMessageAsync(currentInput, _currentConversationId);
-            await JS.InvokeVoidAsync("console.log", $"[Chat] Message response received. CurrentStatusUpdates count: {_currentStatusUpdates.Count}");
 
             var wasNewConversation = _currentConversationId == null;
             _currentConversationId = response.ConversationId;
@@ -355,8 +307,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             var entityStatuses = ConvertEntityChangesToStatusInformation(
                 response.SymptomChanges, 
                 response.AssessmentChanges);
-            
-            await JS.InvokeVoidAsync("console.log", $"[Chat] Entity statuses count: {entityStatuses.Count}, Real-time statuses count: {_currentStatusUpdates.Count}");
             
             // Combine real-time statuses with entity-based statuses
             var allStatuses = new List<StatusInformation>(_currentStatusUpdates);
@@ -383,16 +333,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             // Sort status messages by timestamp to maintain correct order
             // Order should be: assessment-generating -> assessment-created -> assessment-analyzing -> others
             allStatuses = allStatuses.OrderBy(s => GetStatusSortOrder(s)).ThenBy(s => s.Timestamp).ToList();
-            
-            await JS.InvokeVoidAsync("console.log", $"[Chat] Final statuses order: {string.Join(" -> ", allStatuses.Select(s => s switch
-            {
-                AssessmentGeneratingStatus => "generating",
-                AssessmentCompleteStatus => "complete",
-                AssessmentCreatedStatus => "created",
-                AssessmentAnalyzingStatus => "analyzing",
-                _ => "other"
-            }))}");
-            await JS.InvokeVoidAsync("console.log", $"[Chat] Final statuses count: {allStatuses.Count}, Details: {string.Join(", ", allStatuses.Select(s => s.GetType().Name))}");
 
             // Remove processing message if it was added
             if (_currentProcessingMessage != null && Messages.Contains(_currentProcessingMessage))
@@ -410,7 +350,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             };
 
             Messages.Add(aiMessage);
-            await JS.InvokeVoidAsync("console.log", $"[Chat] Added final message with {allStatuses.Count} statuses: {string.Join(", ", allStatuses.Select(s => s.GetType().Name))}");
             
             _currentProcessingMessage = null;
             _currentStatusUpdates.Clear();
@@ -443,18 +382,8 @@ public partial class Chat : ComponentBase, IAsyncDisposable
 
     private async Task OnStatusUpdateReceived(StatusInformation status)
     {
-        var statusType = status switch
-        {
-            AssessmentGeneratingStatus => "assessment-generating",
-            AssessmentCompleteStatus => "assessment-complete",
-            AssessmentCreatedStatus => "assessment-created",
-            AssessmentAnalyzingStatus => "assessment-analyzing",
-            _ => "unknown"
-        };
-        
         // SignalR handler - only enqueues, never triggers render directly
         _statusUpdateQueue.Enqueue(status);
-        await JS.InvokeVoidAsync("console.log", $"[Chat] OnStatusUpdateReceived (queued): {statusType}, Timestamp: {status.Timestamp:HH:mm:ss.fff}, Queue size: {_statusUpdateQueue.Count}");
     }
 
     protected void OnInputTextChanged(string value)
@@ -515,7 +444,6 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             AssessmentGeneratingStatus => 1,
             AssessmentCreatedStatus => 2,
             AssessmentAnalyzingStatus => 3,
-            AssessmentCompleteStatus => 4, // Keep for backwards compatibility
             _ => 5
         };
     }
@@ -656,34 +584,12 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                         }
                         break;
 
-                    case "symptom-gathering":
-                        if (element.TryGetProperty("message", out var gatheringMessageElement))
-                        {
-                            statusList.Add(new SymptomGatheringStatus
-                            {
-                                Message = gatheringMessageElement.GetString() ?? "Gathering symptom details",
-                                Timestamp = timestamp
-                            });
-                        }
-                        break;
-
                     case "assessment-generating":
                         if (element.TryGetProperty("message", out var generatingMessageElement))
                         {
                             statusList.Add(new AssessmentGeneratingStatus
                             {
                                 Message = generatingMessageElement.GetString() ?? "Generating assessment...",
-                                Timestamp = timestamp
-                            });
-                        }
-                        break;
-
-                    case "assessment-complete":
-                        if (element.TryGetProperty("message", out var completeMessageElement))
-                        {
-                            statusList.Add(new AssessmentCompleteStatus
-                            {
-                                Message = completeMessageElement.GetString() ?? "Assessment complete",
                                 Timestamp = timestamp
                             });
                         }
@@ -753,9 +659,10 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             }
         }
         
+        // Unsubscribe from status updates
         ChatHubClient.StatusUpdateReceived -= OnStatusUpdateReceived;
-        await ChatHubClient.DisposeAsync();
         
-        _ = JS.InvokeVoidAsync("console.log", "[Chat] Disposed");
+        // Don't dispose ChatHubClient here - it's a scoped service managed by DI
+        // Disposing it here would break reconnection when navigating back
     }
 }

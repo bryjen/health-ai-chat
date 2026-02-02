@@ -3,7 +3,20 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <style>
+        /* Hide browser navigation arrows/back buttons */
+        ::-webkit-back-button,
+        ::back-button,
+        [role="navigation"] button[aria-label*="back"],
+        [role="navigation"] button[aria-label*="Back"],
+        button[aria-label*="back"],
+        button[aria-label*="Back"] {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+        }
+    </style>
     <title>PulseAI Health | Loading</title>
     <base href="/" />
     <link rel="preload" id="webassembly" />
@@ -14,8 +27,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet" />
     <!--
-    <link href="WebFrontend.styles.css" rel="stylesheet" />
+    <link href="WebFrontend.styles.css" rel="stylesheet"
     -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <script type="importmap"></script>
 </head>
 

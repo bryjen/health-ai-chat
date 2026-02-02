@@ -1,9 +1,8 @@
-@namespace WebFrontend.Components.Chat.StatusBubbles
+@namespace WebFrontend.Components.Core.Chat.StatusBubbles
 @using WebFrontend.Components.UI.Shared
-@using WebFrontend.Models.Chat.StatusTypes
 
 <div class="@GetClasses">
-    <span class="material-symbols-outlined text-sm text-blue-400">description</span>
+    <span class="material-symbols-outlined text-sm text-blue-400 animate-pulse">description</span>
     <span class="text-xs">@Status.Message</span>
 </div>
 
@@ -13,5 +12,5 @@
         "transition-all duration-200 ease-in-out hover:brightness-150");
 
     [Parameter]
-    public required SymptomGatheringStatus Status { get; set; }
+    public required AssessmentGeneratingStatus Status { get; set; }
 }

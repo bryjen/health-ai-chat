@@ -1,0 +1,196 @@
+@page "/episodes/{Id:int}"
+@namespace WebFrontend.Pages.Episodes
+@using Web.Common.DTOs.Health
+
+<PageTitle>Episode Details</PageTitle>
+
+@if (IsLoading)
+{
+    <div class="flex items-center justify-center min-h-screen">
+        <div class="text-muted-foreground">Loading episode...</div>
+    </div>
+}
+else if (ErrorMessage != null)
+{
+    <div class="flex items-center justify-center min-h-screen">
+        <div class="text-destructive">@ErrorMessage</div>
+    </div>
+}
+else if (Episode == null)
+{
+    <div class="flex items-center justify-center min-h-screen">
+        <div class="text-muted-foreground">Episode not found</div>
+    </div>
+}
+else
+{
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="mb-6">
+            <button @onclick="NavigateBack" 
+                    class="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-2">
+                <span class="material-symbols-outlined text-sm">arrow_back</span>
+                <span>Back to Chat</span>
+            </button>
+            <h1 class="text-3xl font-bold">@Episode.SymptomName</h1>
+        </div>
+
+        <div class="space-y-6">
+            <!-- Symptom Description -->
+            @if (!string.IsNullOrWhiteSpace(Episode.SymptomDescription))
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-2">Description</h2>
+                    <p class="text-foreground">@Episode.SymptomDescription</p>
+                </div>
+            }
+
+            <!-- Status and Stage -->
+            <div class="bg-card border rounded-lg p-6">
+                <h2 class="text-xl font-semibold mb-4">Status</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-sm text-muted-foreground">Status:</span>
+                        <div class="mt-1">
+                            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full @GetStatusClass(Episode.Status)">
+                                @GetStatusDisplay(Episode.Status)
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <span class="text-sm text-muted-foreground">Stage:</span>
+                        <div class="mt-1">
+                            <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted text-foreground">
+                                @GetStageDisplay(Episode.Stage)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Severity -->
+            @if (Episode.Severity.HasValue)
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-2">Severity</h2>
+                    <div class="flex items-center gap-4">
+                        <div class="flex-1 bg-muted rounded-full h-2.5">
+                            <div class="bg-primary h-2.5 rounded-full" style="width: @(Episode.Severity.Value * 10)%"></div>
+                        </div>
+                        <span class="text-lg font-medium">@Episode.Severity.Value / 10</span>
+                    </div>
+                </div>
+            }
+
+            <!-- Location -->
+            @if (!string.IsNullOrWhiteSpace(Episode.Location))
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-2">Location</h2>
+                    <p class="text-foreground">@Episode.Location</p>
+                </div>
+            }
+
+            <!-- Frequency -->
+            @if (!string.IsNullOrWhiteSpace(Episode.Frequency))
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-2">Frequency</h2>
+                    <p class="text-foreground">@GetFrequencyDisplay(Episode.Frequency)</p>
+                </div>
+            }
+
+            <!-- Triggers -->
+            @if (Episode.Triggers != null && Episode.Triggers.Any())
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4">Triggers</h2>
+                    <ul class="space-y-2">
+                        @foreach (var trigger in Episode.Triggers)
+                        {
+                            <li class="flex items-start gap-2">
+                                <span class="material-symbols-outlined text-sm text-muted-foreground mt-0.5">circle</span>
+                                <span>@trigger</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <!-- Relievers -->
+            @if (Episode.Relievers != null && Episode.Relievers.Any())
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4">Relievers</h2>
+                    <ul class="space-y-2">
+                        @foreach (var reliever in Episode.Relievers)
+                        {
+                            <li class="flex items-start gap-2">
+                                <span class="material-symbols-outlined text-sm text-muted-foreground mt-0.5">circle</span>
+                                <span>@reliever</span>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <!-- Pattern -->
+            @if (!string.IsNullOrWhiteSpace(Episode.Pattern))
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-2">Pattern</h2>
+                    <p class="text-foreground whitespace-pre-wrap">@Episode.Pattern</p>
+                </div>
+            }
+
+            <!-- Timeline -->
+            @if (Episode.Timeline != null && Episode.Timeline.Any())
+            {
+                <div class="bg-card border rounded-lg p-6">
+                    <h2 class="text-xl font-semibold mb-4">Timeline</h2>
+                    <div class="space-y-4">
+                        @foreach (var entry in Episode.Timeline.OrderBy(t => t.Date))
+                        {
+                            <div class="flex gap-4">
+                                <div class="flex-shrink-0 w-24 text-sm text-muted-foreground">
+                                    @entry.Date.ToString("MMM dd, yyyy")
+                                </div>
+                                <div class="flex-1">
+                                    @if (entry.Severity.HasValue)
+                                    {
+                                        <div class="text-sm font-medium mb-1">Severity: @entry.Severity.Value / 10</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(entry.Notes))
+                                    {
+                                        <p class="text-sm text-foreground">@entry.Notes</p>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Metadata -->
+            <div class="bg-card border rounded-lg p-6">
+                <h2 class="text-xl font-semibold mb-4">Episode Information</h2>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-muted-foreground">Started:</span>
+                        <span>@Episode.StartedAt.ToString("MMMM dd, yyyy 'at' h:mm tt")</span>
+                    </div>
+                    @if (Episode.ResolvedAt.HasValue)
+                    {
+                        <div class="flex justify-between">
+                            <span class="text-muted-foreground">Resolved:</span>
+                            <span>@Episode.ResolvedAt.Value.ToString("MMMM dd, yyyy 'at' h:mm tt")</span>
+                        </div>
+                    }
+                    <div class="flex justify-between">
+                        <span class="text-muted-foreground">Created:</span>
+                        <span>@Episode.CreatedAt.ToString("MMMM dd, yyyy 'at' h:mm tt")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}

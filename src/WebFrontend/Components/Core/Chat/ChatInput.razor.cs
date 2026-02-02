@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using WebFrontend.Components.UI.Select;
 
-namespace WebFrontend.Components.Chat;
+namespace WebFrontend.Components.Core.Chat;
 
 public partial class ChatInput : ComponentBase
 {

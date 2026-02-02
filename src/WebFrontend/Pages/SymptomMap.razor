@@ -2,6 +2,7 @@
 @layout EmptyLayout
 @attribute [Microsoft.AspNetCore.Authorization.Authorize]
 @inherits ComponentBase
+@using WebFrontend.Components.Core.SymptomGraph
 
 <PageTitle>Symptom Correlation Map</PageTitle>
 
@@ -115,48 +116,7 @@
 
             @* Central Graph Visualization *@
             <div class="flex-1 relative overflow-hidden flex items-center justify-center">
-                @* Cluster Rings *@
-                <div class="absolute w-[400px] h-[400px] rounded-full neon-ring flex items-center justify-center -translate-x-32 -translate-y-8">
-                    <div class="absolute top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.5em] whitespace-nowrap" style="color: rgba(82, 136, 237, 0.6);">Influenza Complex</div>
-                </div>
-                <div class="absolute w-[320px] h-[320px] rounded-full neon-ring-white flex items-center justify-center translate-x-40 translate-y-32">
-                    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.5em] whitespace-nowrap" style="color: rgba(255, 255, 255, 0.3);">Upper Respiratory</div>
-                </div>
-
-                @* Connecting Lines SVG *@
-                <svg class="absolute inset-0 w-full h-full pointer-events-none opacity-40">
-                    <line stroke="#5288ed" stroke-width="0.5" x1="45%" x2="52%" y1="45%" y2="48%"></line>
-                    <line stroke="#5288ed" stroke-width="1.5" x1="45%" x2="40%" y1="45%" y2="35%"></line>
-                    <line stroke="#5288ed" stroke-width="0.5" x1="45%" x2="48%" y1="45%" y2="30%"></line>
-                    <line stroke="#ffffff" stroke-width="0.5" x1="55%" x2="62%" y1="55%" y2="58%"></line>
-                    <line stroke="#8e8e8e" stroke-dasharray="2" stroke-width="0.5" x1="55%" x2="52%" y1="55%" y2="48%"></line>
-                </svg>
-
-                @* Symptom Nodes *@
-                @foreach (var node in SymptomNodes)
-                {
-                    <div class="graph-node absolute cursor-pointer group z-20" style="left: @node.Left%; top: @node.Top%;">
-                        <div class="@node.SizeClass rounded-full flex items-center justify-center relative @node.GlowClass @node.HoverClass" style="@node.Style">
-                            <span class="material-symbols-outlined @node.IconSizeClass" style="@node.IconColor">@node.Icon</span>
-                        </div>
-                        @if (!string.IsNullOrEmpty(node.Label))
-                        {
-                            <div class="absolute top-full mt-3 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-white px-2 py-1 rounded border" style="background-color: rgba(17, 17, 17, 0.8); border-color: rgba(255, 255, 255, 0.1);">
-                                @node.Label
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(node.Tooltip))
-                        {
-                            <div class="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-56 p-4 rounded-xl shadow-2xl border hidden group-hover:block transition-all" style="background-color: #111111; border-color: #1f1f1f;">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <div class="size-2 rounded-full animate-pulse" style="background-color: #5288ed;"></div>
-                                    <p class="text-[10px] font-bold uppercase tracking-wider" style="color: #5288ed;">Critical Cluster</p>
-                                </div>
-                                <p class="text-xs leading-relaxed" style="color: #d1d1d1;">@node.Tooltip</p>
-                            </div>
-                        }
-                    </div>
-                }
+                <SymptomGraph Data="@GraphData" />
             </div>
 
             @* Diagnostic Inference Card (Bottom Left) *@

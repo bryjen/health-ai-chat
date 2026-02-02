@@ -7,7 +7,7 @@ namespace WebFrontend.Models.Chat;
 public abstract class StatusInformation
 {
     /// <summary>
-    /// Gets the type identifier for this status (e.g., "general", "symptom-added", "symptom-gathering").
+    /// Gets the type identifier for this status (e.g., "general", "symptom-added", "assessment-generating").
     /// </summary>
     public abstract string Type { get; }
 

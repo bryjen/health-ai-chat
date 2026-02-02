@@ -1,0 +1,12 @@
+@* D3.js Force-Directed Graph Component *@
+@inherits ComponentBase
+@implements IAsyncDisposable
+
+<div id="@ElementId" class="w-full h-full relative overflow-hidden" style="background-color: rgba(0, 0, 0, 0.4);">
+    @if (IsLoading)
+    {
+        <div class="absolute inset-0 flex items-center justify-center">
+            <div class="text-xs font-mono uppercase tracking-widest" style="color: #06b6d4;">Loading graph...</div>
+        </div>
+    }
+</div>

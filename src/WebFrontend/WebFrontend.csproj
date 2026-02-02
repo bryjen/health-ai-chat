@@ -29,6 +29,20 @@
       <Folder Include="Services\Auth\" />
     </ItemGroup>
 
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="Components\Chat\ChatInput.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\ChatMessageList.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\AssessmentAnalyzingBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\AssessmentCompleteBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\AssessmentCreatedBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\AssessmentGeneratingBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\GeneralStatusBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\SymptomAddedBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\SymptomGatheringBubble.razor" />
+      <_ContentIncludedByDefault Remove="Components\Chat\StatusInformationRenderer.razor" />
+    </ItemGroup>
+
+
     <PropertyGroup>
         <TailwindCliPath>$(MSBuildProjectDirectory)\tools\tailwindcss.exe</TailwindCliPath>
         <TailwindCliUrl>

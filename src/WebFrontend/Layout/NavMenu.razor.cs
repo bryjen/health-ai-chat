@@ -74,7 +74,7 @@ public partial class NavMenu : ComponentBase, IDisposable
         {
             Conversations = await ConversationsApiClient.GetAllConversationsAsync();
         }
-        catch (Exception ex)
+        catch
         {
             // Error handling - no console logging needed
             Conversations = new List<ConversationSummaryDto>();

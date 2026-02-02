@@ -157,7 +157,7 @@ Always call the appropriate functions when users report symptoms or request acti
     {
         // Track status updates sent during processing
         var statusUpdatesSent = new List<object>();
-        
+
         try
         {
             // Hydrate conversation context
@@ -184,15 +184,16 @@ Always call the appropriate functions when users report symptoms or request acti
             {
                 kernelBuilder.Services.AddSingleton(embeddingService);
             }
+
             var requestKernel = kernelBuilder.Build();
-            
+
             // Add plugins to kernel
             requestKernel.Plugins.AddFromObject(symptomTrackerPlugin, "SymptomTracker");
             requestKernel.Plugins.AddFromObject(assessmentPlugin, "Assessment");
 
             // Get conversation context messages
             var contextMessages = await GetConversationContextAsync(input.ConversationId, cancellationToken);
-            
+
             // Enrich with cross-conversation messages
             contextMessages = await EnrichContextWithCrossConversationMessagesAsync(
                 input.UserId,
@@ -200,7 +201,7 @@ Always call the appropriate functions when users report symptoms or request acti
                 input.ConversationId,
                 contextMessages,
                 cancellationToken);
-            
+
             // Limit context messages
             contextMessages = LimitContextMessages(contextMessages);
 
@@ -228,8 +229,8 @@ Always call the appropriate functions when users report symptoms or request acti
 
             // Get AI response using request kernel with plugins
             var responseText = await GetChatCompletionWithKernelAsync(
-                requestKernel, 
-                chatHistory, 
+                requestKernel,
+                chatHistory,
                 input.ConnectionId,
                 statusUpdateService,
                 cancellationToken,
@@ -241,7 +242,7 @@ Always call the appropriate functions when users report symptoms or request acti
 
             var response = CreateResponse(responseText);
             response.StatusUpdatesSent = statusUpdatesSent;
-            
+
             return response;
         }
         catch (Exception ex)
@@ -257,21 +258,22 @@ Always call the appropriate functions when users report symptoms or request acti
 
         if (context.ActiveEpisodes.Any())
         {
-            var episodesSummary = string.Join(", ", 
+            var episodesSummary = string.Join(", ",
                 context.ActiveEpisodes.Select(e => $"{e.Symptom?.Name ?? "Unknown"} (stage: {e.Stage})"));
             prompt += $"\n\nCurrent active episodes: {episodesSummary}";
         }
 
         if (context.NegativeFindings.Any())
         {
-            var negativeSummary = string.Join(", ", 
+            var negativeSummary = string.Join(", ",
                 context.NegativeFindings.Select(nf => nf.SymptomName));
             prompt += $"\n\nRecent negative findings (user confirmed they don't have): {negativeSummary}";
         }
 
         if (context.CurrentAssessment != null)
         {
-            prompt += $"\n\nCurrent assessment: {context.CurrentAssessment.Hypothesis} (confidence: {context.CurrentAssessment.Confidence:P0})";
+            prompt +=
+                $"\n\nCurrent assessment: {context.CurrentAssessment.Hypothesis} (confidence: {context.CurrentAssessment.Confidence:P0})";
         }
 
         return prompt;
@@ -302,12 +304,12 @@ Always call the appropriate functions when users report symptoms or request acti
         {
             turnCount++;
             Logger.LogDebug("Multi-turn agentic loop: Turn {TurnNumber}/{MaxTurns}", turnCount, maxTurns);
-            
+
             // Track assessment ID at start of turn to detect new ones
             if (conversationContext != null)
             {
                 assessmentIdBeforeTurn = conversationContext.CurrentAssessment?.Id;
-                
+
                 // Send "generating assessment" BEFORE calling the AI if we have active episodes
                 // and haven't sent it yet, and user message suggests assessment generation
                 if (connectionId != null && statusUpdateService != null && turnCount == 1)
@@ -329,21 +331,27 @@ Always call the appropriate functions when users report symptoms or request acti
                         {
                             // Ignore reflection errors
                         }
+
                         return false;
                     }) ?? false;
-                    
+
                     // Check if user message suggests assessment generation
                     var userMessage = chatHistory.LastOrDefault(m => m.Role == AuthorRole.User)?.Content ?? "";
-                    var mightGenerateAssessment = hasActiveEpisodes && 
-                        (userMessage.Contains("assessment", StringComparison.OrdinalIgnoreCase) ||
-                         userMessage.Contains("diagnosis", StringComparison.OrdinalIgnoreCase) ||
-                         userMessage.Contains("redo", StringComparison.OrdinalIgnoreCase) ||
-                         userMessage.Contains("what do you think", StringComparison.OrdinalIgnoreCase) ||
-                         userMessage.Contains("evaluate", StringComparison.OrdinalIgnoreCase));
-                    
+                    var mightGenerateAssessment = hasActiveEpisodes &&
+                                                  (userMessage.Contains("assessment",
+                                                       StringComparison.OrdinalIgnoreCase) ||
+                                                   userMessage.Contains("diagnosis",
+                                                       StringComparison.OrdinalIgnoreCase) ||
+                                                   userMessage.Contains("redo", StringComparison.OrdinalIgnoreCase) ||
+                                                   userMessage.Contains("what do you think",
+                                                       StringComparison.OrdinalIgnoreCase) ||
+                                                   userMessage.Contains("evaluate",
+                                                       StringComparison.OrdinalIgnoreCase));
+
                     if (mightGenerateAssessment && !alreadySentGenerating)
                     {
-                        Logger.LogDebug("Sending generating assessment status - before AI call, active episodes and user message suggests assessment");
+                        Logger.LogDebug(
+                            "Sending generating assessment status - before AI call, active episodes and user message suggests assessment");
                         await statusUpdateService.SendGeneratingAssessmentAsync(connectionId);
                         statusUpdatesSent?.Add(new
                         {
@@ -365,7 +373,7 @@ Always call the appropriate functions when users report symptoms or request acti
                     cancellationToken: cancellationToken);
 
                 var assistantMessage = response.FirstOrDefault();
-                
+
                 if (assistantMessage == null)
                 {
                     Logger.LogWarning("No assistant message returned on turn {TurnNumber}", turnCount);
@@ -377,13 +385,14 @@ Always call the appropriate functions when users report symptoms or request acti
                 // is called again until it provides a final response. However, we want explicit control,
                 // so we check if the chat history grew (indicating function calls were made).
                 bool hasContent = !string.IsNullOrWhiteSpace(assistantMessage.Content);
-                
+
                 // Check if chat history grew (indicates function calls were made and results added)
                 var historyGrew = chatHistory.Count > initialHistoryCount + turnCount;
-                
+
                 if (historyGrew)
                 {
-                    Logger.LogDebug("Turn {TurnNumber}: Chat history grew (from {Initial} to {Current}), indicating function calls were made", 
+                    Logger.LogDebug(
+                        "Turn {TurnNumber}: Chat history grew (from {Initial} to {Current}), indicating function calls were made",
                         turnCount, initialHistoryCount + turnCount, chatHistory.Count);
                 }
 
@@ -394,13 +403,14 @@ Always call the appropriate functions when users report symptoms or request acti
                 {
                     // Final response - no function calls were made, we have content
                     // Send a brief delay to ensure status messages are displayed before final message
-                    if (connectionId != null && statusUpdateService != null && statusUpdatesSent != null && statusUpdatesSent.Any())
+                    if (connectionId != null && statusUpdateService != null && statusUpdatesSent != null &&
+                        statusUpdatesSent.Any())
                     {
                         await Task.Delay(1000); // Longer delay to ensure all status messages appear first
                     }
-                    
+
                     finalResponse = assistantMessage.Content ?? string.Empty;
-                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})", 
+                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})",
                         turnCount, finalResponse.Length);
                     break;
                 }
@@ -409,30 +419,34 @@ Always call the appropriate functions when users report symptoms or request acti
                 // Add the assistant message to history and continue
                 if (historyGrew)
                 {
-                    Logger.LogDebug("Turn {TurnNumber}: Functions were invoked (history grew), continuing to next turn", turnCount);
-                    
+                    Logger.LogDebug("Turn {TurnNumber}: Functions were invoked (history grew), continuing to next turn",
+                        turnCount);
+
                     // Handle assessment status updates
                     if (connectionId != null && statusUpdateService != null && conversationContext != null)
                     {
                         // Check if a new assessment was created (ID changed or new one created)
                         var assessmentIdAfter = conversationContext.CurrentAssessment?.Id;
-                        var newAssessmentCreated = assessmentIdAfter.HasValue && 
-                            (assessmentIdBeforeTurn == null || assessmentIdAfter.Value != assessmentIdBeforeTurn.Value);
-                        
+                        var newAssessmentCreated = assessmentIdAfter.HasValue &&
+                                                   (assessmentIdBeforeTurn == null || assessmentIdAfter.Value !=
+                                                       assessmentIdBeforeTurn.Value);
+
                         // Check if a new assessment was created
                         if (newAssessmentCreated && conversationContext.CurrentAssessment != null)
                         {
                             var assessment = conversationContext.CurrentAssessment;
-                            Logger.LogDebug("Assessment created detected: Id={Id}, Hypothesis={Hypothesis}, Confidence={Confidence}", 
+                            Logger.LogDebug(
+                                "Assessment created detected: Id={Id}, Hypothesis={Hypothesis}, Confidence={Confidence}",
                                 assessment.Id, assessment.Hypothesis, assessment.Confidence);
-                            
+
                             // Send assessment-created status with details
-                            Logger.LogDebug("Sending assessment-created status via SignalR: Id={Id}, Hypothesis={Hypothesis}", 
+                            Logger.LogDebug(
+                                "Sending assessment-created status via SignalR: Id={Id}, Hypothesis={Hypothesis}",
                                 assessment.Id, assessment.Hypothesis);
                             await statusUpdateService.SendAssessmentCreatedAsync(
-                                connectionId, 
-                                assessment.Id, 
-                                assessment.Hypothesis, 
+                                connectionId,
+                                assessment.Id,
+                                assessment.Hypothesis,
                                 assessment.Confidence);
                             statusUpdatesSent?.Add(new
                             {
@@ -443,7 +457,7 @@ Always call the appropriate functions when users report symptoms or request acti
                                 timestamp = DateTime.UtcNow
                             });
                             await Task.Delay(800); // Delay for UI flow
-                            
+
                             // Analyzing assessment (BEFORE final response - analyzing the completed assessment)
                             await statusUpdateService.SendAnalyzingAssessmentAsync(connectionId);
                             statusUpdatesSent?.Add(new
@@ -455,14 +469,14 @@ Always call the appropriate functions when users report symptoms or request acti
                             await Task.Delay(800); // Delay before final response
                         }
                     }
-                    
+
                     // Add assistant message to history if it has content
                     // Function results are already added by AutoInvokeKernelFunctions
                     if (hasContent && !string.IsNullOrWhiteSpace(assistantMessage.Content))
                     {
                         chatHistory.AddAssistantMessage(assistantMessage.Content);
                     }
-                    
+
                     // Update initial count for next iteration
                     initialHistoryCount = chatHistory.Count;
                     continue;
@@ -472,13 +486,14 @@ Always call the appropriate functions when users report symptoms or request acti
                 if (hasContent)
                 {
                     finalResponse = assistantMessage.Content;
-                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})", 
+                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})",
                         turnCount, finalResponse.Length);
                     break;
                 }
 
                 // If we have neither content nor history growth, something unexpected happened
-                Logger.LogWarning("Turn {TurnNumber}: Unexpected response - no content and no history growth", turnCount);
+                Logger.LogWarning("Turn {TurnNumber}: Unexpected response - no content and no history growth",
+                    turnCount);
                 finalResponse = assistantMessage.Content ?? "I apologize, but I couldn't generate a response.";
                 break;
             }
@@ -496,7 +511,7 @@ Always call the appropriate functions when users report symptoms or request acti
             var lastAssistantMessage = chatHistory
                 .Where(m => m.Role == AuthorRole.Assistant)
                 .LastOrDefault();
-            
+
             if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
             {
                 finalResponse = lastAssistantMessage.Content;
@@ -509,9 +524,9 @@ Always call the appropriate functions when users report symptoms or request acti
             finalResponse = "I apologize, but I couldn't generate a response.";
         }
 
-        Logger.LogDebug("Multi-turn loop completed in {TurnCount} turns. Final response length: {Length}", 
+        Logger.LogDebug("Multi-turn loop completed in {TurnCount} turns. Final response length: {Length}",
             turnCount, finalResponse.Length);
-        
+
         return finalResponse;
     }
 
@@ -523,7 +538,7 @@ Always call the appropriate functions when users report symptoms or request acti
         if (conversationId.HasValue)
         {
             var messages = await _vectorStoreService.GetConversationMessagesAsync(conversationId.Value);
-            Logger.LogDebug("Retrieved {Count} messages from conversation {ConversationId}", 
+            Logger.LogDebug("Retrieved {Count} messages from conversation {ConversationId}",
                 messages.Count, conversationId.Value);
             return messages;
         }
@@ -539,7 +554,7 @@ Always call the appropriate functions when users report symptoms or request acti
         List<Message> contextMessages,
         CancellationToken cancellationToken)
     {
-        if (!_vectorStoreSettings.EnableCrossConversationSearch || 
+        if (!_vectorStoreSettings.EnableCrossConversationSearch ||
             contextMessages.Count >= _vectorStoreSettings.CrossConversationSearchThreshold)
         {
             return contextMessages;
@@ -572,7 +587,7 @@ Always call the appropriate functions when users report symptoms or request acti
         catch (Exception ex)
         {
             // Log but don't fail - fall back to just current conversation context
-            Logger.LogWarning(ex, 
+            Logger.LogWarning(ex,
                 "Error performing cross-conversation semantic search, using only current conversation context");
         }
 
@@ -581,7 +596,7 @@ Always call the appropriate functions when users report symptoms or request acti
 
     private List<Message> LimitContextMessages(List<Message> contextMessages)
     {
-        if (_vectorStoreSettings.MaxContextMessages > 0 && 
+        if (_vectorStoreSettings.MaxContextMessages > 0 &&
             contextMessages.Count > _vectorStoreSettings.MaxContextMessages)
         {
             // Keep the most recent messages
@@ -589,7 +604,7 @@ Always call the appropriate functions when users report symptoms or request acti
                 .OrderBy(m => m.CreatedAt)
                 .TakeLast(_vectorStoreSettings.MaxContextMessages)
                 .ToList();
-            Logger.LogDebug("Limited context to {Count} most recent messages", 
+            Logger.LogDebug("Limited context to {Count} most recent messages",
                 _vectorStoreSettings.MaxContextMessages);
             return limited;
         }

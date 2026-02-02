@@ -1,9 +1,12 @@
-@namespace WebFrontend.Components.Core.Chat
+@namespace WebFrontend.Components.Chat
+@using WebFrontend.Pages
+@using WebFrontend.Models.Chat
+@using Microsoft.AspNetCore.Components
 @implements IAsyncDisposable
 
 <div @ref="_scrollContainer" data-chat-scroll-container class="flex flex-col flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 pt-6 pb-8 pt-16">
     <div class="flex-1">
-        <div class="max-w-5xl mx-auto space-y-6">
+        <div class="max-w-3xl mx-auto space-y-6">
         @foreach (var message in Messages)
         {
             <div class="flex gap-4 @(message.IsUser ? "justify-end" : "justify-start")">
@@ -82,7 +85,7 @@
         // Scroll to bottom when messages change, loading state changes, or on first render
         var messagesChanged = Messages.Count != _previousMessageCount;
         var loadingChanged = IsLoading != _previousIsLoading;
-
+        
         if (firstRender || messagesChanged || loadingChanged)
         {
             _previousMessageCount = Messages.Count;
@@ -97,7 +100,7 @@
         {
             // Wait for DOM to update
             await Task.Delay(100);
-
+            
             // Scroll the container to bottom using querySelector
             await JS.InvokeVoidAsync("eval", @"
                 (function() {
