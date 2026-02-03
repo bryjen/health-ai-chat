@@ -53,18 +53,6 @@ public static class ServiceCollectionExtensions
             // Token will be injected via EnsureAuthenticatedAsync in BaseApiClient
         });
 
-        // Configure HttpClient for HealthChatApiClient (with token provider)
-        services.AddHttpClient<IHealthChatApiClient, HealthChatApiClient>((sp, client) =>
-        {
-            client.BaseAddress = baseUri;
-            client.DefaultRequestHeaders.Accept.Add(
-                new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/json"));
-        })
-        .ConfigureHttpClient((sp, client) =>
-        {
-            // Token will be injected via EnsureAuthenticatedAsync in BaseApiClient
-        });
-
         // Return the auth builder for further configuration
         return authBuilder;
     }

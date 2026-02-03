@@ -7,13 +7,13 @@ locals {
   # Import shared module configuration
   shared_config = {
     webapi_config = {
-      cpu          = var.webapi_cpu
-      memory       = var.webapi_memory
+      cpu          = "0.5"
+      memory       = "512Mi"
       port         = 8080
-      min_replicas = var.webapi_min_replicas
-      max_replicas = var.webapi_max_replicas
-      timeout      = var.webapi_timeout
-      concurrency  = var.container_concurrency
+      min_replicas = 0
+      max_replicas = 2
+      timeout      = 60
+      concurrency  = 1
     }
     webapi_env_vars = {
       "ASPNETCORE_ENVIRONMENT" = var.environment == "prod" ? "Production" : "Development"

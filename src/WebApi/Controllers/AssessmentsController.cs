@@ -7,8 +7,11 @@ using WebApi.Services.Graph;
 
 namespace WebApi.Controllers;
 
+// disabled to avoid no xml docs on injected services as parameters
+#pragma warning disable CS1573 // Parameter has no matching param tag in the XML comment (but other parameters do)
+
 /// <summary>
-/// Handles medical assessment endpoints.
+/// ***Handles medical assessment endpoints***.
 /// Provides access to AI-generated health assessments, differential diagnoses, and recommended actions for conversations.
 /// </summary>
 [Route("api/v1/assessments")]
@@ -16,13 +19,17 @@ namespace WebApi.Controllers;
 public class AssessmentsController : BaseController
 {
     /// <summary>
-    /// Retrieves the medical assessment associated with a specific conversation.
+    /// Retrieves Assessment by Conversation ID
     /// </summary>
     /// <param name="conversationId">The unique identifier of the conversation.</param>
-    /// <returns>Assessment details including hypothesis, confidence, differentials, reasoning, and recommended actions.</returns>
     /// <response code="200">Assessment retrieved successfully.</response>
-    /// <response code="401">User not authenticated.</response>
-    /// <response code="404">Assessment not found or does not belong to the current user.</response>
+    /// <response code="401">User isn't authenticated. **Returns standardized `ErrorResponse` model**.</response>
+    /// <response code="404">Assessment isn't found or does not belong to the current user. **Returns standardized `ErrorResponse` model**.</response>
+    /// <remarks>
+    /// **Requires the request to be authenticated (stores user info).**
+    ///
+    /// Retrieves the medical assessment associated with a specific conversation.
+    /// </remarks>
     [HttpGet("conversation/{conversationId}")]
     [ProducesResponseType(typeof(AssessmentDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -64,12 +71,16 @@ public class AssessmentsController : BaseController
     }
 
     /// <summary>
-    /// Retrieves the most recent medical assessments for the current authenticated user.
+    /// User's Recent Assessments
     /// </summary>
     /// <param name="limit">Maximum number of assessments to return. Defaults to 10.</param>
-    /// <returns>List of recent assessments with their details.</returns>
     /// <response code="200">Recent assessments retrieved successfully.</response>
-    /// <response code="401">User not authenticated.</response>
+    /// <response code="401">User isn't authenticated. **Returns standardized `ErrorResponse` model**.</response>
+    /// <remarks>
+    /// **Requires the request to be authenticated (stores user info).**
+    ///
+    /// Retrieves the most recent medical assessments for the current authenticated user.
+    /// </remarks>
     [HttpGet("recent")]
     [ProducesResponseType(typeof(List<AssessmentDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -105,8 +116,16 @@ public class AssessmentsController : BaseController
     }
 
     /// <summary>
-    /// Retrieves a specific medical assessment by its unique identifier.
+    /// Retrieves Assessment by Assessment ID
     /// </summary>
+    /// <param name="id">The unique identifier of the assessment.</param>
+    /// <response code="200">Recent assessments retrieved successfully.</response>
+    /// <response code="401">User isn't authenticated. **Returns standardized `ErrorResponse` model**.</response>
+    /// <remarks>
+    /// **Requires the request to be authenticated (stores user info).**
+    ///
+    /// Retrieves a specific medical assessment by its unique identifier.
+    /// </remarks>
     [HttpGet("{id}")]
     [ProducesResponseType(typeof(AssessmentDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -148,13 +167,18 @@ public class AssessmentsController : BaseController
     }
 
     /// <summary>
-    /// Retrieves graph visualization data for a specific assessment.
+    /// Assessment as Graph
     /// </summary>
     /// <param name="id">The unique identifier of the assessment.</param>
     /// <returns>Graph data containing nodes and edges for visualization.</returns>
     /// <response code="200">Graph data retrieved successfully.</response>
-    /// <response code="401">User not authenticated.</response>
-    /// <response code="404">Assessment not found or does not belong to the current user.</response>
+    /// <response code="401">User isn't authenticated. **Returns standardized `ErrorResponse` model**.</response>
+    /// <response code="404">Assessment isn't found or does not belong to the current user. **Returns standardized `ErrorResponse` model**.</response>
+    /// <remarks>
+    /// **Requires the request to be authenticated (stores user info).**
+    ///
+    /// Retrieves graph visualization data for a specific assessment.
+    /// </remarks>
     [HttpGet("{id}/graph")]
     [ProducesResponseType(typeof(GraphDataDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
@@ -164,7 +188,7 @@ public class AssessmentsController : BaseController
         [FromServices] GraphDataService graphDataService)
     {
         var userId = GetUserId();
-        
+
         try
         {
             var graphData = await graphDataService.GetAssessmentGraphDataAsync(id, userId);

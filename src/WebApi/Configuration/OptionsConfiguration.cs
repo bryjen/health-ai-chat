@@ -39,12 +39,12 @@ public static class OptionsConfiguration
     /// </para>
     /// </remarks>
     public static void ConfigureAppOptions(
-        this IServiceCollection services, 
+        this IServiceCollection services,
         IConfiguration configuration)
     {
         // register request validators (scoped - used during request processing)
         services.AddValidatorsFromAssemblyContaining<RegisterRequestValidator>();
-        
+
         // register configuration validators as Singleton (stateless, used at startup)
         // these need to be Singleton because IValidateOptions<T> is a singleton and resolves them
         services.AddSingleton<IValidator<JwtSettings>, JwtSettingsValidator>();
@@ -52,7 +52,7 @@ public static class OptionsConfiguration
         services.AddSingleton<IValidator<FrontendSettings>, FrontendSettingsValidator>();
         services.AddSingleton<IValidator<RateLimitingSettings>, RateLimitingSettingsValidator>();
         services.AddSingleton<IValidator<AzureOpenAiSettings>, AzureOpenAiSettingsValidator>();
-        
+
         services.AddValidatedSettings<JwtSettings>(configuration);
         services.AddValidatedSettings<EmailSettings>(configuration);
         services.AddValidatedSettings<FrontendSettings>(configuration);
@@ -61,7 +61,7 @@ public static class OptionsConfiguration
         services.AddValidatedSettings<AzureOpenAiSettings>(configuration);
         services.AddValidatedSettings<VectorStoreSettings>(configuration, hasValidator: false);
         services.AddValidatedSettings<VersionSettings>(configuration, hasValidator: false);
-        
+
         // enable automatic FluentValidation for ASP.NET Core model binding
         services.AddFluentValidationAutoValidation();
     }
@@ -126,17 +126,17 @@ public static class OptionsConfiguration
         IConfiguration configuration,
         bool hasValidator = true) where T : class
     {
-        var sectionName = typeof(T).GetField("SectionName", 
+        var sectionName = typeof(T).GetField("SectionName",
             BindingFlags.Public | BindingFlags.Static)?.GetValue(null) as string ?? typeof(T).Name;
-        
+
         services.Configure<T>(configuration.GetSection(sectionName));
-        
+
         if (hasValidator)
         {
             services.AddSingleton<IValidateOptions<T>>(sp =>
                 new FluentValidationOptionsAdapter<T>(sp.GetRequiredService<IValidator<T>>()));
         }
-        
+
         return services;
     }
 }

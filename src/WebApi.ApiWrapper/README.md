@@ -4,7 +4,7 @@ A strongly-typed API client wrapper for the WebApi endpoints, designed for use i
 
 ## Features
 
-- **Strongly-typed API clients** for all endpoints (Auth, Conversations, HealthChat)
+- **Strongly-typed API clients** for all endpoints (Auth, Conversations)
 - **Typed exceptions** for different HTTP error scenarios
 - **Automatic token management** via `ITokenProvider`
 - **HttpClient factory pattern** for proper lifecycle management
@@ -145,40 +145,6 @@ public class ConversationsService
 }
 ```
 
-### Health Chat
-
-```csharp
-public class HealthChatService
-{
-    private readonly IHealthChatApiClient _healthChatClient;
-
-    public HealthChatService(IHealthChatApiClient healthChatClient)
-    {
-        _healthChatClient = healthChatClient;
-    }
-
-    public async Task<HealthChatResponse> SendMessageAsync(string message, Guid? conversationId = null)
-    {
-        try
-        {
-            return await _healthChatClient.SendHealthMessageAsync(new HealthChatRequest
-            {
-                Message = message,
-                ConversationId = conversationId
-            });
-        }
-        catch (ApiValidationException ex)
-        {
-            // Handle validation errors
-            foreach (var error in ex.Errors)
-            {
-                Console.WriteLine($"{error.Key}: {string.Join(", ", error.Value)}");
-            }
-            throw;
-        }
-    }
-}
-```
 
 ## Exception Handling
 
@@ -284,9 +250,7 @@ catch (ApiException ex)
 - `UpdateConversationTitleAsync(Guid id, UpdateConversationTitleRequest)` - Update conversation title
 - `DeleteConversationAsync(Guid id)` - Delete conversation
 
-### IHealthChatApiClient
-
-- `SendHealthMessageAsync(HealthChatRequest)` - Send health chat message
+**Note:** Health chat functionality is available via SignalR WebSocket connection at `/hubs/chat`, not via REST API.
 
 ## Token Management
 

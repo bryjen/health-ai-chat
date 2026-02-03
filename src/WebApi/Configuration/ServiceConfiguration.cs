@@ -167,6 +167,9 @@ public static class ServiceConfiguration
                 };
                 return requirement;
             });
+
+            // Add SignalR documentation as a separate tag
+            options.DocumentFilter<SignalRDocumentFilter>();
         });
     }
 

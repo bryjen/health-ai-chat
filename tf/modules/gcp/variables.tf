@@ -171,39 +171,3 @@ variable "elevenlabs_voice_id" {
   sensitive   = false
   default     = ""
 }
-
-variable "webapi_cpu" {
-  description = "CPU allocation for WebApi container"
-  type        = string
-  default     = "0.5"
-}
-
-variable "webapi_memory" {
-  description = "Memory allocation for WebApi container"
-  type        = string
-  default     = "512Mi"
-}
-
-variable "webapi_min_replicas" {
-  description = "Minimum number of replicas for WebApi"
-  type        = number
-  default     = 0
-}
-
-variable "webapi_max_replicas" {
-  description = "Maximum number of replicas for WebApi"
-  type        = number
-  default     = 2
-}
-
-variable "webapi_timeout" {
-  description = "Request timeout in seconds for WebApi"
-  type        = number
-  default     = 60
-}
-
-variable "container_concurrency" {
-  description = "Container concurrency"
-  type        = number
-  default     = 1
-}

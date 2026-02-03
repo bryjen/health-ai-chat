@@ -47,14 +47,6 @@ module "gcp_deployment" {
   # ElevenLabs configuration
   elevenlabs_api_key = var.elevenlabs_api_key
   elevenlabs_voice_id = var.elevenlabs_voice_id
-
-  # Container resource configuration
-  webapi_cpu            = var.webapi_cpu
-  webapi_memory         = var.webapi_memory
-  webapi_min_replicas   = var.webapi_min_replicas
-  webapi_max_replicas   = var.webapi_max_replicas
-  webapi_timeout        = var.webapi_timeout
-  container_concurrency = var.container_concurrency
 }
 
 ########################################

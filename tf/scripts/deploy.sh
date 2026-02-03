@@ -1,9 +1,9 @@
 #!/bin/bash
 
 ########################################
-# Multi-Cloud Terraform Deployment Script
+# GCP Terraform Deployment Script
 ########################################
-# Usage: ./deploy.sh [gcp|azure] [plan|apply|destroy] [options]
+# Usage: ./deploy.sh [plan|apply|destroy] [options]
 #
 # Options:
 #   --backend-config="key=value"  - Backend configuration (can be used multiple times)
@@ -12,11 +12,11 @@
 #   --auto-approve                 - Skip confirmation prompts
 #
 # Examples:
-#   ./deploy.sh gcp plan
-#   ./deploy.sh gcp plan --plan-file=cloud_run
-#   ./deploy.sh gcp init --backend-config="bucket=my-bucket" --migrate-state
-#   ./deploy.sh gcp apply --plan-file=cloud_run --auto-approve
-#   ./deploy.sh azure apply --auto-approve
+#   ./deploy.sh plan
+#   ./deploy.sh plan --plan-file=cloud_run
+#   ./deploy.sh init --backend-config="bucket=my-bucket" --migrate-state
+#   ./deploy.sh apply --plan-file=cloud_run --auto-approve
+#   ./deploy.sh apply --auto-approve
 
 set -e
 
@@ -31,16 +31,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Parse arguments
-PROVIDER="${1:-}"
-ACTION="${2:-plan}"
+ACTION="${1:-plan}"
 
-# Parse options (skip first two positional args)
+# Parse options (skip first positional arg)
 BACKEND_CONFIGS=()
 MIGRATE_STATE=false
 PLAN_FILE=""
 AUTO_APPROVE=false
 
-shift 2 2>/dev/null || true
+shift 1 2>/dev/null || true
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -83,18 +82,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Validate provider
-if [ -z "$PROVIDER" ]; then
-    echo -e "${RED}Error: Provider not specified${NC}"
-    echo "Usage: $0 [gcp|azure] [plan|apply|destroy]"
-    exit 1
-fi
-
-if [ "$PROVIDER" != "gcp" ] && [ "$PROVIDER" != "azure" ]; then
-    echo -e "${RED}Error: Invalid provider '$PROVIDER'. Must be 'gcp' or 'azure'${NC}"
-    exit 1
-fi
-
 # Validate action
 if [ "$ACTION" != "plan" ] && [ "$ACTION" != "apply" ] && [ "$ACTION" != "destroy" ] && [ "$ACTION" != "init" ]; then
     echo -e "${RED}Error: Invalid action '$ACTION'. Must be 'init', 'plan', 'apply', or 'destroy'${NC}"
@@ -102,7 +89,7 @@ if [ "$ACTION" != "plan" ] && [ "$ACTION" != "apply" ] && [ "$ACTION" != "destro
 fi
 
 # Set environment directory
-ENV_DIR="$TF_ROOT/environments/$PROVIDER"
+ENV_DIR="$TF_ROOT/environments/gcp"
 
 if [ ! -d "$ENV_DIR" ]; then
     echo -e "${RED}Error: Environment directory not found: $ENV_DIR${NC}"
@@ -113,7 +100,7 @@ fi
 cd "$ENV_DIR"
 
 echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}Deploying to ${PROVIDER^^}${NC}"
+echo -e "${GREEN}Deploying to GCP${NC}"
 echo -e "${GREEN}Action: $ACTION${NC}"
 echo -e "${GREEN}Directory: $ENV_DIR${NC}"
 echo -e "${GREEN}========================================${NC}"
@@ -125,25 +112,12 @@ if ! command -v terraform &> /dev/null; then
     exit 1
 fi
 
-# Provider-specific checks
-if [ "$PROVIDER" == "gcp" ]; then
-    echo -e "${YELLOW}Checking GCP authentication...${NC}"
-    if ! command -v gcloud &> /dev/null; then
-        echo -e "${YELLOW}Warning: gcloud CLI not found. Make sure you're authenticated.${NC}"
-    else
-        echo -e "${GREEN}gcloud CLI found${NC}"
-    fi
-elif [ "$PROVIDER" == "azure" ]; then
-    echo -e "${YELLOW}Checking Azure authentication...${NC}"
-    if ! command -v az &> /dev/null; then
-        echo -e "${YELLOW}Warning: Azure CLI not found. Make sure you're authenticated.${NC}"
-    else
-        echo -e "${GREEN}Azure CLI found${NC}"
-        # Check if logged in
-        if ! az account show &> /dev/null; then
-            echo -e "${YELLOW}Warning: Not logged in to Azure. Run 'az login' if needed.${NC}"
-        fi
-    fi
+# Check GCP authentication
+echo -e "${YELLOW}Checking GCP authentication...${NC}"
+if ! command -v gcloud &> /dev/null; then
+    echo -e "${YELLOW}Warning: gcloud CLI not found. Make sure you're authenticated.${NC}"
+else
+    echo -e "${GREEN}gcloud CLI found${NC}"
 fi
 
 echo ""
@@ -229,7 +203,7 @@ case "$ACTION" in
         fi
         ;;
     destroy)
-        echo -e "${RED}WARNING: This will destroy all infrastructure in $PROVIDER!${NC}"
+        echo -e "${RED}WARNING: This will destroy all infrastructure in GCP!${NC}"
         if [ "$AUTO_APPROVE" != "true" ]; then
             read -p "Type 'yes' to confirm: " confirm
             if [ "$confirm" != "yes" ]; then

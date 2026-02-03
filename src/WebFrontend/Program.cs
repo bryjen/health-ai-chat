@@ -81,20 +81,6 @@ builder.Services.AddHttpClient<IConversationsApiClient>((sp, client) =>
     return new ConversationsApiClient(httpClient, tokenProvider);
 });
 
-builder.Services.AddHttpClient<IHealthChatApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
-.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<IHealthChatApiClient>((httpClient, sp) =>
-{
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new HealthChatApiClient(httpClient, tokenProvider);
-});
-
 builder.Services.AddHttpClient<IEpisodesApiClient>((sp, client) =>
 {
     client.BaseAddress = baseUri;

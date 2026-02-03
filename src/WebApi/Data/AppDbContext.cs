@@ -247,7 +247,7 @@ public class AppDbContext(
             entity.Property(e => e.Location).HasMaxLength(200);
             entity.Property(e => e.Frequency).HasMaxLength(50);
             entity.Property(e => e.Pattern).HasMaxLength(500);
-            
+
             // JSON conversions for collections
             entity.Property(e => e.Triggers)
                 .HasColumnType("jsonb")
@@ -259,7 +259,7 @@ public class AppDbContext(
                         ? null
                         : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
-            
+
             entity.Property(e => e.Relievers)
                 .HasColumnType("jsonb")
                 .HasConversion(
@@ -270,7 +270,7 @@ public class AppDbContext(
                         ? null
                         : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
-            
+
             entity.Property(e => e.Timeline)
                 .HasColumnType("jsonb")
                 .HasConversion(
@@ -281,7 +281,7 @@ public class AppDbContext(
                         ? null
                         : System.Text.Json.JsonSerializer.Deserialize<List<EpisodeTimelineEntry>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
-            
+
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -332,7 +332,7 @@ public class AppDbContext(
             entity.Property(e => e.Confidence).IsRequired().HasColumnType("decimal(3,2)");
             entity.Property(e => e.Reasoning).IsRequired();
             entity.Property(e => e.RecommendedAction).IsRequired().HasMaxLength(50);
-            
+
             // JSON conversions for collections
             entity.Property(e => e.Differentials)
                 .HasColumnType("jsonb")
@@ -344,7 +344,7 @@ public class AppDbContext(
                         ? null
                         : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
-            
+
             entity.Property(e => e.NegativeFindingIds)
                 .HasColumnType("jsonb")
                 .HasConversion(
@@ -355,7 +355,7 @@ public class AppDbContext(
                         ? null
                         : System.Text.Json.JsonSerializer.Deserialize<List<int>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
-            
+
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
             entity.HasIndex(e => e.UserId);

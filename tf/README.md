@@ -1,14 +1,14 @@
-# Multi-Cloud Terraform Configuration
+# GCP Terraform Configuration
 
-This directory contains a modular Terraform configuration that supports deployment to both Google Cloud Platform (GCP) and Microsoft Azure.
+This directory contains a modular Terraform configuration for deployment to Google Cloud Platform (GCP).
 
 ## Architecture
 
-The configuration is organized into three layers:
+The configuration is organized into two layers:
 
 1. **Shared Module** (`modules/shared/`) - Common variables, environment variable definitions, and configuration abstractions
-2. **Provider Modules** (`modules/gcp/`, `modules/azure/`) - Cloud-specific resource implementations
-3. **Environment Configurations** (`environments/gcp/`, `environments/azure/`) - Deployment entry points
+2. **GCP Module** (`modules/gcp/`) - GCP-specific resource implementations (Cloud Run)
+3. **Environment Configuration** (`environments/gcp/`) - Deployment entry point
 
 ## Directory Structure
 
@@ -16,14 +16,13 @@ The configuration is organized into three layers:
 tf/
 ├── modules/
 │   ├── shared/          # Common configuration
-│   ├── gcp/             # GCP-specific resources (Cloud Run)
-│   └── azure/           # Azure-specific resources (Container Apps)
+│   └── gcp/             # GCP-specific resources (Cloud Run)
 ├── environments/
-│   ├── gcp/             # GCP deployment configuration
-│   └── azure/           # Azure deployment configuration
+│   └── gcp/             # GCP deployment configuration
 ├── scripts/
 │   └── deploy.sh        # Deployment wrapper script
-└── gcp/                 # Legacy GCP config (maintained for backward compatibility)
+└── accs/
+    └── gcp/             # GCP service account creation scripts
 ```
 
 ## Quick Start
@@ -45,23 +44,6 @@ cd tf/scripts
 ./deploy.sh gcp apply
 ```
 
-### Deploy to Azure
-
-```bash
-cd tf/environments/azure
-terraform init
-terraform plan
-terraform apply
-```
-
-Or use the deployment script:
-
-```bash
-cd tf/scripts
-./deploy.sh azure plan
-./deploy.sh azure apply
-```
-
 ## Configuration
 
 ### GCP-Specific Variables
@@ -69,16 +51,9 @@ cd tf/scripts
 - `gcp_project_id` - GCP Project ID
 - `gcp_region` - GCP region (default: `us-central1`)
 
-### Azure-Specific Variables
-
-- `azure_location` - Azure region (default: `eastus`)
-- `azure_resource_group_name` - Resource group name (optional, will be created if not provided)
-- `acr_name` - Azure Container Registry name
-- `create_resource_group` - Whether to create a new resource group (default: `true`)
-
 ### Shared Application Variables
 
-All application configuration variables are shared between providers:
+All application configuration variables:
 
 - `environment` - Environment name (dev, staging, prod)
 - `project_name` - Project name for resource naming
@@ -88,9 +63,10 @@ All application configuration variables are shared between providers:
 - `cors_enabled` - Enable or disable CORS (default: `true`, set to `false` to completely disable CORS)
 - `cors_allowed_origins` - CORS allowed origins (comma-separated or single origin)
 - OAuth configuration variables
+- Azure OpenAI configuration variables (for Azure OpenAI service)
 - Container resource limits (CPU, memory, replicas, timeouts)
 
-See `environments/gcp/variables.tf` or `environments/azure/variables.tf` for the complete list.
+See `environments/gcp/variables.tf` for the complete list.
 
 ## Backend Configuration
 
@@ -105,37 +81,14 @@ backend "gcs" {
 }
 ```
 
-### Azure Backend (Azure Storage)
-
-Configure in `environments/azure/providers.tf`:
-
-```hcl
-backend "azurerm" {
-  resource_group_name  = "terraform-state-rg"
-  storage_account_name = "terraformstate"
-  container_name       = "tfstate"
-  key                  = "containerapps/state.terraform.tfstate"
-}
-```
-
 ## Key Features
 
-- **~70% code reuse**: All application configuration defined once in the shared module
+- **Modular design**: Application configuration defined once in the shared module
 - **Single source of truth**: Environment variables and container config in one place
-- **Consistent outputs**: Same output structure regardless of provider
-- **Easy to extend**: Adding new providers only requires a new provider module
-
-## Migration from Legacy Configuration
-
-The original GCP configuration in `tf/gcp/` is preserved for backward compatibility. To migrate:
-
-1. Copy your variable values from `tf/gcp/terraform.tfvars` (if you have one) to `tf/environments/gcp/terraform.tfvars`
-2. Update backend configuration in `tf/environments/gcp/providers.tf`
-3. Run `terraform init` to migrate state
-4. Deploy using the new structure
+- **Easy to extend**: Adding new services only requires updating the GCP module
 
 ## Notes
 
 - The deployment script (`scripts/deploy.sh`) requires bash (works on Linux, Mac, Git Bash, or WSL on Windows)
-- Container images should be pushed to the appropriate registry (GCR for GCP, ACR for Azure) before deployment
+- Container images should be pushed to GCR before deployment
 - Database connection strings and secrets should be provided via environment variables or secure variable files
