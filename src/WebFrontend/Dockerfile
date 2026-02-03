@@ -17,13 +17,13 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Tailwind CSS CLI globally
-RUN npm install -g tailwindcss
+# Install Tailwind CSS CLI globally (v4 uses @tailwindcss/cli)
+RUN npm install -g @tailwindcss/cli
 
 # RUN npm config set cache /tmp/.npm --global && dotnet publish "./src/WebFrontend/WebFrontend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false || (cat /tmp/.npm/_logs/*-debug-0.log 2>/dev/null; exit 1)
 RUN node --version && npm --version
 RUN npm config set loglevel verbose
-RUN npx -y tailwindcss --help || echo "npx tailwindcss failed to initialize"
+RUN npx -y @tailwindcss/cli --help || echo "npx @tailwindcss/cli failed to initialize"
 
 # Copy from solution root (build context should be the solution directory)
 COPY . .
