@@ -11,10 +11,6 @@ resource "google_cloud_run_service" "webapi" {
   name     = "ai-health-app-backend"
   location = local.cloud_run_location
 
-  lifecycle {
-    prevent_destroy = true
-  }
-
   template {
     spec {
       containers {
@@ -42,7 +38,7 @@ resource "google_cloud_run_service" "webapi" {
       }
 
       container_concurrency = local.webapi_config.concurrency
-      timeout_seconds      = local.webapi_config.timeout
+      timeout_seconds       = local.webapi_config.timeout
     }
 
     metadata {
@@ -66,10 +62,6 @@ resource "google_cloud_run_service" "webapi" {
 resource "google_cloud_run_service" "webfrontend" {
   name     = "ai-health-app-frontend"
   location = local.cloud_run_location
-
-  lifecycle {
-    prevent_destroy = true
-  }
 
   template {
     spec {
@@ -98,7 +90,7 @@ resource "google_cloud_run_service" "webfrontend" {
       }
 
       container_concurrency = local.webfrontend_config.concurrency
-      timeout_seconds      = local.webfrontend_config.timeout
+      timeout_seconds       = local.webfrontend_config.timeout
     }
 
     metadata {
