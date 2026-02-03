@@ -18,7 +18,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Tailwind CSS CLI globally (v4 uses @tailwindcss/cli)
-RUN npm install -g @tailwindcss/cli
+RUN npm install -g @tailwindcss/cli tailwindcss
 
 # RUN npm config set cache /tmp/.npm --global && dotnet publish "./src/WebFrontend/WebFrontend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false || (cat /tmp/.npm/_logs/*-debug-0.log 2>/dev/null; exit 1)
 RUN node --version && npm --version
@@ -45,6 +45,14 @@ RUN echo "Setting Version fields" \
     fi
 
 RUN dotnet restore "./src/WebFrontend/WebFrontend.csproj"
+
+# Build Tailwind CSS externally (completely separate from .csproj)
+# Initialize npm project and install tailwindcss@4 locally, then build the CSS
+RUN cd ./src/WebFrontend && \
+    npm init -y && \
+    npm install tailwindcss@4 && \
+    npx @tailwindcss/cli -i ./wwwroot/css/input.css -o ./wwwroot/css/app.css --minify
+
 RUN dotnet publish "./src/WebFrontend/WebFrontend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 # Serve the published wwwroot via nginx
