@@ -20,7 +20,7 @@ RUN apt-get update && \
 # Install Tailwind CSS CLI globally
 RUN npm install -g tailwindcss
 
-RUN npm config set cache /tmp/.npm --global && dotnet publish "./src/WebFrontend/WebFrontend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false || (cat /tmp/.npm/_logs/*-debug-0.log 2>/dev/null; exit 1)
+# RUN npm config set cache /tmp/.npm --global && dotnet publish "./src/WebFrontend/WebFrontend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false || (cat /tmp/.npm/_logs/*-debug-0.log 2>/dev/null; exit 1)
 RUN node --version && npm --version
 RUN npm config set loglevel verbose
 RUN npx -y tailwindcss --help || echo "npx tailwindcss failed to initialize"
