@@ -44,26 +44,16 @@
 
 
     <PropertyGroup>
-        <TailwindCliPath>$(MSBuildProjectDirectory)\tools\tailwindcss.exe</TailwindCliPath>
-        <TailwindCliUrl>
-            https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-windows-x64.exe</TailwindCliUrl>
         <!-- Only build Tailwind in Release configuration -->
         <BuildTailwind Condition="'$(Configuration)' == ''">false</BuildTailwind>
         <BuildTailwind Condition="'$(Configuration)' == 'Debug'">false</BuildTailwind>
         <BuildTailwind Condition="'$(Configuration)' == 'Release'">true</BuildTailwind>
     </PropertyGroup>
 
-    <!-- Download Tailwind CLI only if needed and in Release -->
-    <Target Name="DownloadTailwindCli" BeforeTargets="BuildTailwind" Condition="'$(BuildTailwind)' == 'true' AND !Exists('$(TailwindCliPath)')">
-        <MakeDir Directories="$(MSBuildProjectDirectory)\tools" />
-        <Message Text="Downloading Tailwind CSS Standalone CLI..." Importance="high" />
-        <Exec Command="powershell -Command &quot;Invoke-WebRequest -Uri '$(TailwindCliUrl)' -OutFile '$(TailwindCliPath)'&quot;" ContinueOnError="false" />
-    </Target>
-
-    <!-- Build Tailwind only in Release configuration with incremental build support -->
-    <Target Name="BuildTailwind" BeforeTargets="Build" Condition="'$(BuildTailwind)' == 'true' AND Exists('$(TailwindCliPath)')" Inputs="wwwroot/css/input.css;tailwind.config.js" Outputs="wwwroot/css/app.css">
-        <Message Text="Building Tailwind CSS (Production)..." Importance="normal" />
-        <Exec Command="&quot;$(TailwindCliPath)&quot; -i ./wwwroot/css/input.css -o ./wwwroot/css/app.css --minify" ContinueOnError="false" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <!-- Build Tailwind using npx (works on both Windows and Linux) -->
+    <Target Name="BuildTailwind" BeforeTargets="Build" Condition="'$(BuildTailwind)' == 'true'" Inputs="wwwroot/css/input.css;tailwind.config.js" Outputs="wwwroot/css/app.css">
+        <Message Text="Building Tailwind CSS (Production) using npx..." Importance="normal" />
+        <Exec Command="npx tailwindcss -i ./wwwroot/css/input.css -o ./wwwroot/css/app.css --minify" ContinueOnError="false" WorkingDirectory="$(MSBuildProjectDirectory)" />
     </Target>
 
 </Project>
