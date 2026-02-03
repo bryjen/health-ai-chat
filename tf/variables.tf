@@ -1,5 +1,21 @@
 ########################################
-# Common Application Variables
+# GCP-Specific Variables
+########################################
+
+variable "gcp_project_id" {
+  description = "GCP Project ID"
+  type        = string
+  default     = "YOUR_PROJECT_ID"
+}
+
+variable "gcp_region" {
+  description = "GCP region for resources"
+  type        = string
+  default     = "us-central1"
+}
+
+########################################
+# Application Configuration
 ########################################
 
 variable "environment" {
@@ -15,11 +31,51 @@ variable "project_name" {
 }
 
 ########################################
+# Version Information
+########################################
+
+variable "version_major" {
+  description = "Version major number"
+  type        = number
+  default     = 0
+}
+
+variable "version_minor" {
+  description = "Version minor number"
+  type        = number
+  default     = 0
+}
+
+variable "version_patch" {
+  description = "Version patch number"
+  type        = number
+  default     = 0
+}
+
+variable "version_prerelease" {
+  description = "Version pre-release identifier (e.g., 'alpha', 'beta', 'rc1')"
+  type        = string
+  default     = null
+}
+
+variable "version_build_metadata" {
+  description = "Version build metadata (e.g., 'build.123')"
+  type        = string
+  default     = null
+}
+
+########################################
 # Container Images
 ########################################
 
 variable "webapi_image" {
-  description = "Docker image for WebApi (full image path)"
+  description = "Docker image for WebApi (e.g., gcr.io/PROJECT_ID/asptemplate-webapi:latest)"
+  type        = string
+  default     = ""
+}
+
+variable "webfrontend_image" {
+  description = "Docker image for WebFrontend (e.g., gcr.io/PROJECT_ID/asptemplate-webfrontend:latest)"
   type        = string
   default     = ""
 }
@@ -187,4 +243,3 @@ variable "elevenlabs_voice_id" {
   sensitive   = false
   default     = ""
 }
-

@@ -10,16 +10,14 @@ param(
     [string[]]$VariableFiles = @()
 )
 
-# If no specific files provided, find all variables.tf files
-# Sort to prioritize shared module first (better categorization), then modules, then environments
+# If no specific files provided, find variables.tf in the root tf directory
 if ($VariableFiles.Count -eq 0) {
-    $allFiles = Get-ChildItem -Path $TfRoot -Recurse -Filter "variables.tf" | Select-Object -ExpandProperty FullName
-    # Sort: shared first, then modules, then environments
-    $VariableFiles = $allFiles | Sort-Object {
-        if ($_ -match '\\shared\\') { 1 }
-        elseif ($_ -match '\\modules\\') { 2 }
-        elseif ($_ -match '\\environments\\') { 3 }
-        else { 4 }
+    $variablesFile = Join-Path $TfRoot "variables.tf"
+    if (Test-Path $variablesFile) {
+        $VariableFiles = @($variablesFile)
+    } else {
+        Write-Host "Error: variables.tf not found in $TfRoot" -ForegroundColor Red
+        exit 1
     }
 }
 

@@ -88,15 +88,15 @@ if [ "$ACTION" != "plan" ] && [ "$ACTION" != "apply" ] && [ "$ACTION" != "destro
     exit 1
 fi
 
-# Set environment directory
-ENV_DIR="$TF_ROOT/environments/gcp"
+# Set terraform directory
+ENV_DIR="$TF_ROOT"
 
 if [ ! -d "$ENV_DIR" ]; then
-    echo -e "${RED}Error: Environment directory not found: $ENV_DIR${NC}"
+    echo -e "${RED}Error: Terraform directory not found: $ENV_DIR${NC}"
     exit 1
 fi
 
-# Change to environment directory
+# Change to terraform directory
 cd "$ENV_DIR"
 
 echo -e "${GREEN}========================================${NC}"

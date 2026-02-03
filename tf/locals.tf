@@ -1,17 +1,47 @@
 ########################################
-# Environment Variable Definitions
+# Locals: Container Configuration
 ########################################
-# These maps define all environment variables for both services.
-# Provider-specific modules will convert these to their native format.
 
 locals {
+  cloud_run_location = var.gcp_region
+
+  # Version information
+  version = {
+    Major        = var.version_major
+    Minor        = var.version_minor
+    Patch        = var.version_patch
+    PreRelease   = var.version_prerelease
+    BuildMetadata = var.version_build_metadata
+  }
+
+  # Container resource configuration
+  webapi_config = {
+    cpu          = "0.5"
+    memory       = "512Mi"
+    port         = 8080
+    min_replicas = 0
+    max_replicas = 2
+    timeout      = 60
+    concurrency  = 1
+  }
+
+  webfrontend_config = {
+    cpu          = "0.5"
+    memory       = "512Mi"
+    port         = 8080
+    min_replicas = 0
+    max_replicas = 2
+    timeout      = 60
+    concurrency  = 1
+  }
+
   # WebApi environment variables
   webapi_env_vars = {
     "ASPNETCORE_ENVIRONMENT" = var.environment == "prod" ? "Production" : "Development"
     "OTEL_SERVICE_NAME"      = "WebApi"
   }
 
-  # WebApi environment variables (conditional - only included if values are provided)
+  # WebApi conditional environment variables (only included if values are provided)
   webapi_env_vars_conditional = {
     "ConnectionStrings__DefaultConnection" = var.database_connection_string
     "Jwt__Secret"                         = var.jwt_secret
@@ -36,8 +66,7 @@ locals {
     "ElevenLabs__VoiceId"                   = var.elevenlabs_voice_id
   }
 
-  # Helper function to merge and filter empty values
-  # Provider modules should use this pattern to filter out empty strings
+  # Merge and filter empty values for WebApi
   webapi_env_vars_all = merge(
     local.webapi_env_vars,
     {
