@@ -1,5 +1,6 @@
 #!/bin/sh
-set -e
+# Don't use set -e here - we want to continue even if config replacement fails
+# set -e
 
 ###############################################################################
 # Frontend appsettings.json Runtime Replacement
@@ -46,6 +47,13 @@ set -e
 
 CONFIG_FILE="/usr/share/nginx/html/appsettings.json"
 
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "WARNING: $CONFIG_FILE not found, skipping config replacement"
+else
+    echo "Found config file: $CONFIG_FILE"
+fi
+
 # Escape special characters for sed
 escape_sed() {
     echo "$1" | sed 's/[[\.*^$()+?{|]/\\&/g'
@@ -57,7 +65,7 @@ replace_json_string() {
     local env_value=$2
     local parent_object=$3
     
-    if [ -z "$env_value" ]; then
+    if [ -z "$env_value" ] || [ ! -f "$CONFIG_FILE" ]; then
         return 0
     fi
     
@@ -65,10 +73,10 @@ replace_json_string() {
     
     if [ -n "$parent_object" ]; then
         # Replace within a specific parent object
-        sed -i "/\"$parent_object\":\\s*{/,/}/ s|\"$json_key\"\\s*:\\s*\"[^\"]*\"|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE"
+        sed -i "/\"$parent_object\":\\s*{/,/}/ s|\"$json_key\"\\s*:\\s*\"[^\"]*\"|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE" || true
     else
         # Replace at root level
-        sed -i "s|\"$json_key\"\\s*:\\s*\"[^\"]*\"|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE"
+        sed -i "s|\"$json_key\"\\s*:\\s*\"[^\"]*\"|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE" || true
     fi
     
     echo "Replaced $json_key with value from environment"
@@ -80,16 +88,16 @@ replace_json_number() {
     local env_value=$2
     local parent_object=$3
     
-    if [ -z "$env_value" ]; then
+    if [ -z "$env_value" ] || [ ! -f "$CONFIG_FILE" ]; then
         return 0
     fi
     
     if [ -n "$parent_object" ]; then
         # Replace within a specific parent object
-        sed -i "/\"$parent_object\":\\s*{/,/}/ s|\"$json_key\"\\s*:\\s*[0-9]*|\"$json_key\": $env_value|g" "$CONFIG_FILE"
+        sed -i "/\"$parent_object\":\\s*{/,/}/ s|\"$json_key\"\\s*:\\s*[0-9]*|\"$json_key\": $env_value|g" "$CONFIG_FILE" || true
     else
         # Replace at root level
-        sed -i "s|\"$json_key\"\\s*:\\s*[0-9]*|\"$json_key\": $env_value|g" "$CONFIG_FILE"
+        sed -i "s|\"$json_key\"\\s*:\\s*[0-9]*|\"$json_key\": $env_value|g" "$CONFIG_FILE" || true
     fi
     
     echo "Replaced $json_key with value from environment"
@@ -101,7 +109,7 @@ replace_json_nullable() {
     local env_value=$2
     local parent_object=$3
     
-    if [ -z "$env_value" ]; then
+    if [ -z "$env_value" ] || [ ! -f "$CONFIG_FILE" ]; then
         return 0
     fi
     
@@ -109,10 +117,10 @@ replace_json_nullable() {
     
     if [ -n "$parent_object" ]; then
         # Replace null or string value within parent object
-        sed -i "/\"$parent_object\":\\s*{/,/}/ s|\"$json_key\"\\s*:\\s*[^,}]*|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE"
+        sed -i "/\"$parent_object\":\\s*{/,/}/ s|\"$json_key\"\\s*:\\s*[^,}]*|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE" || true
     else
         # Replace null or string value at root level
-        sed -i "s|\"$json_key\"\\s*:\\s*[^,}]*|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE"
+        sed -i "s|\"$json_key\"\\s*:\\s*[^,}]*|\"$json_key\": \"$escaped_value\"|g" "$CONFIG_FILE" || true
     fi
     
     echo "Replaced $json_key with value from environment"
@@ -160,5 +168,39 @@ done <<EOF
 $CONFIG_MAPPINGS
 EOF
 
+# Verify nginx config exists and is valid before starting
+echo "Checking nginx configuration..."
+if [ ! -f "/etc/nginx/conf.d/default.conf" ]; then
+    echo "ERROR: /etc/nginx/conf.d/default.conf not found!"
+    exit 1
+fi
+
+# Show nginx config for debugging
+echo "Nginx config file exists. First 10 lines:"
+head -n 10 /etc/nginx/conf.d/default.conf || true
+
+# Verify nginx config is valid
+echo "Validating nginx configuration..."
+if ! nginx -t; then
+    echo "ERROR: nginx configuration is invalid!"
+    echo "Showing nginx config:"
+    cat /etc/nginx/conf.d/default.conf || true
+    echo "Showing nginx error log:"
+    cat /var/log/nginx/error.log 2>/dev/null || true
+    exit 1
+fi
+
+# List files in html directory for debugging
+echo "Contents of /usr/share/nginx/html:"
+ls -la /usr/share/nginx/html/ || true
+
+# Check if index.html exists (critical file)
+if [ ! -f "/usr/share/nginx/html/index.html" ]; then
+    echo "ERROR: index.html not found in /usr/share/nginx/html/"
+    echo "This is a critical error - the app cannot start without index.html"
+    exit 1
+fi
+
 # Start nginx
+echo "Starting nginx..."
 exec nginx -g 'daemon off;'
