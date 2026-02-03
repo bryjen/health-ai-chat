@@ -53,7 +53,7 @@
     <!-- Build Tailwind using npx (works on both Windows and Linux) -->
     <Target Name="BuildTailwind" BeforeTargets="Build" Condition="'$(BuildTailwind)' == 'true'" Inputs="wwwroot/css/input.css;tailwind.config.js" Outputs="wwwroot/css/app.css">
         <Message Text="Building Tailwind CSS (Production) using npx..." Importance="normal" />
-        <Exec Command="npx tailwindcss -i ./wwwroot/css/input.css -o ./wwwroot/css/app.css --minify" ContinueOnError="false" WorkingDirectory="$(MSBuildProjectDirectory)" />
+        <Exec Command="npx -y tailwindcss -i ./wwwroot/css/input.css -o ./wwwroot/css/app.css --minify" ContinueOnError="false" WorkingDirectory="$(MSBuildProjectDirectory)" />
     </Target>
 
 </Project>

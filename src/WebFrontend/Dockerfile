@@ -17,6 +17,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Tailwind CSS CLI globally
+RUN npm install -g tailwindcss
+
 # Copy from solution root (build context should be the solution directory)
 COPY . .
 
