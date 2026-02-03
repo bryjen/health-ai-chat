@@ -86,6 +86,15 @@ resource "google_cloud_run_service" "webfrontend" {
             memory = local.webfrontend_config.memory
           }
         }
+
+        # Environment variables
+        dynamic "env" {
+          for_each = local.webfrontend_env_vars_all
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
       }
 
       container_concurrency = local.webfrontend_config.concurrency

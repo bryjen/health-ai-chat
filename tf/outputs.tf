@@ -4,7 +4,13 @@
 
 output "version" {
   description = "Version information"
-  value       = local.version
+  value = {
+    Major        = var.version_major
+    Minor        = var.version_minor
+    Patch        = var.version_patch
+    PreRelease   = var.version_prerelease
+    BuildMetadata = var.version_build_metadata
+  }
 }
 
 output "webapi_url" {

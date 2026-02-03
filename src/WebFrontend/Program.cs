@@ -47,93 +47,91 @@ builder.Services.AddScoped<TokenRefreshHttpMessageHandler>(sp =>
     var localStorageTokenProvider = sp.GetRequiredService<LocalStorageTokenProvider>();
     var authService = sp.GetService<AuthService>();
     var authStateProvider = sp.GetService<AuthenticationStateProvider>();
-    return new TokenRefreshHttpMessageHandler(tokenProvider, refreshClient, localStorageTokenProvider, authService, authStateProvider);
+    return new TokenRefreshHttpMessageHandler(tokenProvider, refreshClient, localStorageTokenProvider, authService,
+        authStateProvider);
 });
 
 // Register API clients manually to have full control
 // AuthApiClient needs token provider for GetCurrentUserAsync, but token is optional for login/register
 // Note: AuthApiClient doesn't use TokenRefreshHttpMessageHandler to avoid circular dependency on refresh endpoint
 builder.Services.AddHttpClient<IAuthApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<IAuthApiClient>((httpClient, sp) =>
-{
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new AuthApiClient(httpClient, tokenProvider);
-});
+    {
+        client.BaseAddress = baseUri;
+        client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+    })
+    .AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+    .AddTypedClient<IAuthApiClient>((httpClient, sp) =>
+    {
+        var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+        return new AuthApiClient(httpClient, tokenProvider);
+    });
 
 // Authenticated clients need token refresh handler (outermost) and token provider handler (innermost)
 builder.Services.AddHttpClient<IConversationsApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
-.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<IConversationsApiClient>((httpClient, sp) =>
-{
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new ConversationsApiClient(httpClient, tokenProvider);
-});
+    {
+        client.BaseAddress = baseUri;
+        client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+    })
+    .AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
+    .AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+    .AddTypedClient<IConversationsApiClient>((httpClient, sp) =>
+    {
+        var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+        return new ConversationsApiClient(httpClient, tokenProvider);
+    });
 
 builder.Services.AddHttpClient<IEpisodesApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
-.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<IEpisodesApiClient>((httpClient, sp) =>
-{
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new EpisodesApiClient(httpClient, tokenProvider);
-});
+    {
+        client.BaseAddress = baseUri;
+        client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+    })
+    .AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
+    .AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+    .AddTypedClient<IEpisodesApiClient>((httpClient, sp) =>
+    {
+        var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+        return new EpisodesApiClient(httpClient, tokenProvider);
+    });
 
 builder.Services.AddHttpClient<IAssessmentsApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
-.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<IAssessmentsApiClient>((httpClient, sp) =>
-{
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new AssessmentsApiClient(httpClient, tokenProvider);
-});
+    {
+        client.BaseAddress = baseUri;
+        client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+    })
+    .AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
+    .AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+    .AddTypedClient<IAssessmentsApiClient>((httpClient, sp) =>
+    {
+        var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+        return new AssessmentsApiClient(httpClient, tokenProvider);
+    });
 
 builder.Services.AddHttpClient<ISymptomsApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
-.AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<ISymptomsApiClient>((httpClient, sp) =>
-{
-    var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new SymptomsApiClient(httpClient, tokenProvider);
-});
+    {
+        client.BaseAddress = baseUri;
+        client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+    })
+    .AddHttpMessageHandler<TokenRefreshHttpMessageHandler>()
+    .AddHttpMessageHandler<TokenProviderHttpMessageHandler>()
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+    .AddTypedClient<ISymptomsApiClient>((httpClient, sp) =>
+    {
+        var tokenProvider = sp.GetRequiredService<ITokenProvider>();
+        return new SymptomsApiClient(httpClient, tokenProvider);
+    });
 
 // Register location API client (public endpoints, no auth required)
 builder.Services.AddHttpClient<ILocationApiClient>((sp, client) =>
-{
-    client.BaseAddress = baseUri;
-    client.DefaultRequestHeaders.Accept.Add(jsonHeader);
-})
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
-.AddTypedClient<ILocationApiClient>((httpClient, sp) =>
-{
-    return new LocationApiClient(httpClient);
-});
+    {
+        client.BaseAddress = baseUri;
+        client.DefaultRequestHeaders.Accept.Add(jsonHeader);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler())
+    .AddTypedClient<ILocationApiClient>((httpClient, sp) => { return new LocationApiClient(httpClient); });
 
 // Register authorization and OAuth services
 builder.Services.AddAuthorizationCore();
