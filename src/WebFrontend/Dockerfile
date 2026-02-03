@@ -20,6 +20,11 @@ RUN apt-get update && \
 # Install Tailwind CSS CLI globally
 RUN npm install -g tailwindcss
 
+RUN npm config set cache /tmp/.npm --global && dotnet publish "./src/WebFrontend/WebFrontend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false || (cat /tmp/.npm/_logs/*-debug-0.log 2>/dev/null; exit 1)
+RUN node --version && npm --version
+RUN npm config set loglevel verbose
+RUN npx -y tailwindcss --help || echo "npx tailwindcss failed to initialize"
+
 # Copy from solution root (build context should be the solution directory)
 COPY . .
 
@@ -33,10 +38,10 @@ RUN echo "Setting Version fields" \
     && sed -i "s#\"Minor\"\\s*:\\s*[0-9]*#\"Minor\": ${VERSION_MINOR}#g" src/WebFrontend/wwwroot/appsettings.json \
     && sed -i "s#\"Patch\"\\s*:\\s*[0-9]*#\"Patch\": ${VERSION_PATCH}#g" src/WebFrontend/wwwroot/appsettings.json \
     && if [ -n "${VERSION_PRERELEASE}" ]; then \
-        sed -i "s#\"PreRelease\"\\s*:\\s*[^,}]*#\"PreRelease\": \"${VERSION_PRERELEASE}\"#g" src/WebFrontend/wwwroot/appsettings.json; \
+    sed -i "s#\"PreRelease\"\\s*:\\s*[^,}]*#\"PreRelease\": \"${VERSION_PRERELEASE}\"#g" src/WebFrontend/wwwroot/appsettings.json; \
     fi \
     && if [ -n "${VERSION_BUILD_METADATA}" ]; then \
-        sed -i "s#\"BuildMetadata\"\\s*:\\s*[^,}]*#\"BuildMetadata\": \"${VERSION_BUILD_METADATA}\"#g" src/WebFrontend/wwwroot/appsettings.json; \
+    sed -i "s#\"BuildMetadata\"\\s*:\\s*[^,}]*#\"BuildMetadata\": \"${VERSION_BUILD_METADATA}\"#g" src/WebFrontend/wwwroot/appsettings.json; \
     fi
 
 RUN dotnet restore "./src/WebFrontend/WebFrontend.csproj"
