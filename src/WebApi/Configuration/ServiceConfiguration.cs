@@ -279,7 +279,11 @@ public static class ServiceConfiguration
                 };
             });
 
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            // Allow anonymous access to API documentation endpoints
+            options.FallbackPolicy = null; // No global authorization requirement
+        });
     }
 
     /// <summary>

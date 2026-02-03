@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.AspNetCore.Authorization;
 using Scalar.AspNetCore;
 
 namespace WebApi.Configuration;
@@ -49,6 +50,8 @@ public static class WebApplicationConfiguration
 
     public static WebApplication ConfigureScalarDocs(this WebApplication app)
     {
+        // Map Scalar API Reference UI - accessible at /scalar
+        // Scalar endpoints are public by default (no [Authorize] attribute)
         app.MapScalarApiReference(options =>
         {
             options.WithTheme(ScalarTheme.None);
@@ -64,7 +67,8 @@ public static class WebApplicationConfiguration
         app.MapGet("/", () => Results.Redirect("/scalar", permanent: false))  // root redirect to Scalar UI
             .ExcludeFromDescription()
             .WithName("RootRedirect")
-            .WithTags("Redirect");
+            .WithTags("Redirect")
+            .AllowAnonymous(); // Allow public access to root redirect
 
         return app;
     }
