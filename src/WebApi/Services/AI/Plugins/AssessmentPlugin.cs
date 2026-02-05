@@ -54,15 +54,17 @@ public class AssessmentPlugin(
     }
 
     [KernelFunction]
-    [Description("CreateAssessment: CALL THIS FUNCTION to create a medical assessment. REQUIRED when user asks for assessment or you have enough info for diagnosis. Parameters: hypothesis (your diagnosis), confidence (0.0-1.0, use 0.7 if unsure), differentials (optional alternatives as array), reasoning (optional), recommendedAction (see-gp/urgent-care/emergency/self-care). Episode weights are automatically assigned from active symptoms.")]
+    [Description("CreateAssessment: MANDATORY FUNCTION TO CALL when user requests an assessment, diagnosis, or evaluation. You MUST call this function immediately when user says 'create assessment', 'generate assessment', 'assessment please', or any similar request. DO NOT describe assessments in text - CALL THIS FUNCTION. Parameters: hypothesis (required - your diagnosis as string, e.g. 'viral infection'), confidence (required - 0.0-1.0 decimal, use 0.7 if unsure), differentials (optional - array of alternative diagnoses, can be empty []), reasoning (optional - explanation), recommendedAction (optional - 'see-gp'/'urgent-care'/'emergency'/'self-care', defaults to 'see-gp'). Episode weights are automatically assigned from active symptoms.")]
     public async Task<string> CreateAssessmentAsync(
-        [Description("Your primary diagnosis or hypothesis")] string hypothesis,
-        [Description("Confidence level 0.0 to 1.0 (use 0.7 if unsure)")] decimal confidence,
-        [Description("Alternative diagnoses as an array of strings. Can be empty array [] if none.")] List<string>? differentials = null,
-        [Description("Your reasoning")] string reasoning = "",
-        [Description("Recommended action: see-gp, urgent-care, emergency, or self-care")] string recommendedAction = "see-gp",
-        [Description("Negative finding IDs as an array of integers. Can be empty array [] if none.")] List<int>? negativeFindingIds = null)
+        [Description("REQUIRED: Your primary diagnosis or hypothesis as a string (e.g. 'viral infection', 'influenza', 'migraine')")] string hypothesis,
+        [Description("REQUIRED: Confidence level 0.0 to 1.0 decimal (use 0.7 if unsure, 0.8-0.9 if confident)")] decimal confidence,
+        [Description("OPTIONAL: Alternative diagnoses as an array of strings. Can be empty array [] or null if none.")] List<string>? differentials = null,
+        [Description("OPTIONAL: Your reasoning or explanation for the diagnosis")] string reasoning = "",
+        [Description("OPTIONAL: Recommended action - 'see-gp', 'urgent-care', 'emergency', or 'self-care' (defaults to 'see-gp')")] string recommendedAction = "see-gp",
+        [Description("OPTIONAL: Negative finding IDs as an array of integers. Can be empty array [] or null if none.")] List<int>? negativeFindingIds = null)
     {
+        logger.LogInformation("[ASSESSMENT_PLUGIN] CreateAssessmentAsync CALLED with hypothesis='{Hypothesis}', confidence={Confidence}, recommendedAction='{RecommendedAction}'", 
+            hypothesis, confidence, recommendedAction);
         try
         {
             var context = GetContext();

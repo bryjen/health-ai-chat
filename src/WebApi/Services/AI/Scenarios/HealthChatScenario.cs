@@ -44,6 +44,32 @@ public partial class HealthChatScenario(
 
 **IF YOU DON'T CALL THE FUNCTIONS, THE DATA IS NOT SAVED AND THE USER CANNOT SEE IT.**
 
+## CRITICAL: ASSESSMENT CREATION RULES
+
+**WHEN USER ASKS FOR ASSESSMENT, YOU MUST CALL THE FUNCTION IMMEDIATELY - NO EXCEPTIONS**
+
+If the user says ANY of these phrases, you MUST call CreateAssessment() function IMMEDIATELY:
+- ""create assessment"", ""generate assessment"", ""make assessment"", ""assessment""
+- ""can you generate an assessment"", ""please create an assessment"", ""I want an assessment""
+- ""give me an assessment"", ""provide assessment"", ""assessment please""
+- ANY request for assessment, diagnosis, or evaluation
+
+**DO NOT:**
+- Describe what you would do
+- Say ""I will create an assessment""
+- Explain the assessment in text
+- Wait for more information if you already have symptoms
+
+**DO THIS INSTEAD:**
+1. Call GetActiveEpisodes() to see current symptoms
+2. IMMEDIATELY call CreateAssessment() with your diagnosis
+3. Use confidence=0.7 if unsure, or higher if confident
+4. The function WILL save it - you don't need to describe it
+
+**Example:**
+User: ""can you generate an assessment please""
+You: [CALL GetActiveEpisodes()] → [CALL CreateAssessment(hypothesis=""viral infection"", confidence=0.7, recommendedAction=""see-gp"")] → Then respond with JSON message
+
 ## Workflow
 
 **Step 1: User reports symptoms**
@@ -56,24 +82,23 @@ public partial class HealthChatScenario(
 **Step 2: User denies symptoms**
 - IMMEDIATELY call RecordNegativeFinding() for each denied symptom
 
-**Step 3: Create assessment**
-- **BEFORE creating an assessment, ALWAYS call GetActiveEpisodes() to see what symptoms the user has**
-- **CALL CreateAssessment() IMMEDIATELY when user says:**
-  - ""create assessment"", ""regenerate assessment"", ""make assessment"", ""assessment""
-  - ""call createassessment"", ""call createassessment function""
-  - OR when you have enough info for a diagnosis
-- **ALWAYS use CreateAssessment() - it creates a new assessment each time (even for ""regenerate"")**
-- **DO NOT describe assessments in text - CALL THE FUNCTION**
-- **Example workflow:** 
-  1. Call GetActiveEpisodes() to see current symptoms
-  2. Review the symptoms and conversation history
-  3. Call CreateAssessment(hypothesis=""your diagnosis"", confidence=0.7, recommendedAction=""see-gp"")
-- Required: hypothesis (your diagnosis as a string), confidence (0.0-1.0 decimal, use 0.7 if unsure)
-- Optional: differentials (list of alternative diagnoses), reasoning (explanation), recommendedAction (defaults to ""see-gp"")
-- The function will save the assessment - you don't need to describe it, just call it
+**Step 3: Create assessment (CRITICAL - READ CAREFULLY)**
+- **WHEN USER ASKS FOR ASSESSMENT: STOP EVERYTHING AND CALL CreateAssessment() IMMEDIATELY**
+- **BEFORE calling CreateAssessment(), call GetActiveEpisodes() to see what symptoms exist**
+- **THEN IMMEDIATELY call CreateAssessment() - DO NOT DESCRIBE IT, CALL IT**
+- **Required parameters:**
+  - hypothesis: Your diagnosis as a string (e.g., ""viral infection"", ""influenza"", ""migraine"")
+  - confidence: 0.0 to 1.0 decimal (use 0.7 if unsure, 0.8-0.9 if confident)
+  - recommendedAction: ""see-gp"", ""urgent-care"", ""emergency"", or ""self-care""
+- **Optional parameters:**
+  - differentials: List of alternative diagnoses (can be empty array [])
+  - reasoning: Explanation of your diagnosis
+- **The function automatically saves the assessment - you don't need to describe it in your response**
 
 **Step 4: Final response**
-- After all function calls are complete, format your final response as JSON with a ""message"" field
+- **IMPORTANT: Function calls happen FIRST, then JSON formatting**
+- After ALL function calls are complete (including CreateAssessment if requested), format your final response as JSON
+- The JSON ""message"" field should acknowledge what you did (e.g., ""I've created an assessment based on your symptoms"")
 
 ## Phase Awareness
 
@@ -84,9 +109,9 @@ Track conversation phase:
 
 ## Response Format
 
-CRITICAL: You MUST format your final response as valid JSON with a REQUIRED ""message"" field. The ""message"" field is MANDATORY and must be a string containing your response to the user.
+CRITICAL: Function calls happen FIRST, then JSON formatting. Do NOT skip function calls to format JSON faster.
 
-After you have completed all necessary function calls and gathered all information, format your final response as valid JSON in this EXACT format:
+After you have completed ALL necessary function calls (especially CreateAssessment if user requested it), format your final response as valid JSON in this EXACT format:
 {
   ""message"": ""Your response message to the user - THIS FIELD IS REQUIRED"",
   ""appointment"": {
@@ -109,7 +134,9 @@ REQUIREMENTS:
 - The ""message"" field is REQUIRED and must be a string (not an object or array)
 - The ""message"" field must contain your natural language response to the user
 - Do NOT include other fields at the root level (like ""symptoms"" or ""questions"") - only ""message"", ""appointment"", and ""symptomChanges""
-- Focus on calling functions and gathering information first. Format your final response as JSON only after all function calls are complete.";
+- **CRITICAL ORDER: 1) Call functions FIRST (especially CreateAssessment if requested), 2) THEN format JSON response**
+- **If user asks for assessment, you MUST call CreateAssessment() BEFORE formatting your JSON response**
+- **Never skip function calls - they must happen before JSON formatting**";
 
     private readonly VectorStoreSettings _vectorStoreSettings = vectorStoreSettings.Value;
 
@@ -141,7 +168,13 @@ REQUIREMENTS:
             {
                 prompt += $"\n\n**Current Active Symptoms:** {string.Join(", ", symptomNames)}";
                 prompt += "\nUse GetActiveEpisodes() if you need more details about these symptoms.";
+                prompt += "\n\n**REMINDER:** If the user asks for an assessment, you MUST call CreateAssessment() function immediately. Do not describe it - call it.";
             }
+        }
+        else
+        {
+            // Even if no symptoms, remind about assessment function
+            prompt += "\n\n**REMINDER:** If the user asks for an assessment, you MUST call CreateAssessment() function immediately. Do not describe it - call it.";
         }
 
         return prompt;
@@ -191,12 +224,12 @@ REQUIREMENTS:
         try
         {
             // Hydrate conversation context (becomes the scoped instance)
-            Logger.LogDebug("Hydrating context for UserId: {UserId}, ConversationId: {ConversationId}", 
+            Logger.LogDebug("Hydrating context for UserId: {UserId}, ConversationId: {ConversationId}",
                 input.UserId, input.ConversationId);
             var conversationContext = await contextService.HydrateContextAsync(
                 input.UserId,
                 input.ConversationId);
-            Logger.LogDebug("Context hydrated. ConversationId in context: {ConversationId}", 
+            Logger.LogDebug("Context hydrated. ConversationId in context: {ConversationId}",
                 conversationContext.ConversationId);
 
             // Set client connection for plugins to access
@@ -221,12 +254,12 @@ REQUIREMENTS:
             // Add plugins to kernel
             requestKernel.Plugins.AddFromObject(symptomTrackerPlugin, "SymptomTracker");
             requestKernel.Plugins.AddFromObject(assessmentPlugin, "Assessment");
-            
+
             // Log available functions for debugging
             var availableFunctions = requestKernel.Plugins
                 .SelectMany(p => p.Select(f => $"{p.Name}.{f.Name}"))
                 .ToList();
-            Logger.LogDebug("Registered {Count} kernel functions: {Functions}", 
+            Logger.LogDebug("Registered {Count} kernel functions: {Functions}",
                 availableFunctions.Count, string.Join(", ", availableFunctions));
 
             // Get conversation context messages
@@ -246,6 +279,17 @@ REQUIREMENTS:
             // Build chat history with context-aware system prompt
             var chatHistory = new ChatHistory();
             var systemPrompt = BuildSystemPromptWithContext(conversationContext);
+            
+            // TODO: might need to remove
+            // If user is requesting assessment, add explicit reminder to system prompt
+            var userMessageLower = input.Message.ToLowerInvariant();
+            var assessmentKeywords = new[] { "assessment", "assess", "diagnosis", "evaluate", "evaluation", "generate assessment", "create assessment" };
+            if (assessmentKeywords.Any(keyword => userMessageLower.Contains(keyword)))
+            {
+                Logger.LogInformation("User message contains assessment keywords - adding explicit reminder to call CreateAssessment()");
+                systemPrompt += "\n\n*** USER IS REQUESTING AN ASSESSMENT - YOU MUST CALL CreateAssessment() FUNCTION IMMEDIATELY. DO NOT DESCRIBE IT - CALL IT NOW. ***";
+            }
+            
             chatHistory.AddSystemMessage(systemPrompt);
 
             // Add context messages in chronological order
@@ -293,20 +337,39 @@ REQUIREMENTS:
     }
 
 
+    private string SerializeChatHistoryForLogging(ChatHistory chatHistory)
+    {
+        try
+        {
+            var messages = chatHistory.Select((msg, idx) =>
+            {
+                var role = msg.Role.ToString();
+                var content = msg.Content ?? "";
+                var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
+                return $"[{idx}] {role}: {contentPreview}";
+            }).ToList();
+            return string.Join("\n", messages);
+        }
+        catch (Exception ex)
+        {
+            return $"Error serializing chat history: {ex.Message}";
+        }
+    }
+
     private async Task<(string Response, List<EntityChange> ExplicitChanges)> GetChatCompletionWithKernelAsync(
         Kernel kernel,
         ChatHistory chatHistory,
         CancellationToken cancellationToken = default)
     {
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-        
+
         // Log available functions before calling
         var availableFunctions = kernel.Plugins
             .SelectMany(p => p.Select(f => $"{p.Name}.{f.Name}"))
             .ToList();
-        Logger.LogInformation("Available kernel functions before chat completion: {Functions}", 
+        Logger.LogInformation("Available kernel functions before chat completion: {Functions}",
             string.Join(", ", availableFunctions));
-        
+
         var executionSettings = new OpenAIPromptExecutionSettings
         {
             ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
@@ -317,6 +380,15 @@ REQUIREMENTS:
 
         try
         {
+            // Log what we're sending to the model
+            var chatHistorySummary = SerializeChatHistoryForLogging(chatHistory);
+            var messageCount = chatHistory.Count;
+            var totalChars = chatHistory.Sum(m => (m.Content ?? "").Length);
+            Logger.LogInformation("[MODEL_CALL] === MAIN CALL START ===\nChat History ({Count} messages, {TotalChars} chars):\n{History}\nSettings: AutoInvokeKernelFunctions=true",
+                messageCount, totalChars, chatHistorySummary);
+
+            var startTime = DateTime.UtcNow;
+
             // Single call - AutoInvoke handles all recursion internally
             Logger.LogDebug("Calling GetChatMessageContentsAsync with AutoInvokeKernelFunctions");
             var response = await chatCompletionService.GetChatMessageContentsAsync(
@@ -324,6 +396,17 @@ REQUIREMENTS:
                 executionSettings,
                 kernel,
                 cancellationToken: cancellationToken);
+
+            var duration = DateTime.UtcNow - startTime;
+            var responseMessages = response.Select((msg, idx) =>
+            {
+                var role = msg.Role.ToString();
+                var content = msg.Content ?? "";
+                var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
+                return $"[{idx}] {role}: {contentPreview}";
+            }).ToList();
+            Logger.LogInformation("[MODEL_CALL] === MAIN CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
+                duration.TotalMilliseconds, response.Count(), string.Join("\n", responseMessages));
 
             // Extract final response from the last assistant message
             // AutoInvoke has already handled all tool calls and recursion
@@ -523,6 +606,13 @@ CRITICAL: The ""message"" field is REQUIRED and must be a string. If the respons
             formattingHistory.AddSystemMessage(schemaPrompt);
             formattingHistory.AddUserMessage($"Format this response as valid JSON with a REQUIRED 'message' field:\n\n{response}");
 
+            // Log what we're sending to the model for formatting
+            var formattingHistorySummary = SerializeChatHistoryForLogging(formattingHistory);
+            Logger.LogInformation("[MODEL_CALL] === FORMATTING CALL START ===\nChat History ({Count} messages):\n{History}\nSettings: No tool calling",
+                formattingHistory.Count, formattingHistorySummary);
+
+            var formattingStartTime = DateTime.UtcNow;
+
             // Create formatting settings without tool calling
             // Use default behavior (no tools) for formatting pass
             var formattingSettings = new OpenAIPromptExecutionSettings();
@@ -532,6 +622,17 @@ CRITICAL: The ""message"" field is REQUIRED and must be a string. If the respons
                 formattingSettings,
                 kernel,
                 cancellationToken: cancellationToken);
+
+            var formattingDuration = DateTime.UtcNow - formattingStartTime;
+            var formattedResponseMessages = formattedResponse.Select((msg, idx) =>
+            {
+                var role = msg.Role.ToString();
+                var content = msg.Content ?? "";
+                var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
+                return $"[{idx}] {role}: {contentPreview}";
+            }).ToList();
+            Logger.LogInformation("[MODEL_CALL] === FORMATTING CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
+                formattingDuration.TotalMilliseconds, formattedResponse.Count(), string.Join("\n", formattedResponseMessages));
 
             var formattedMessage = formattedResponse.FirstOrDefault()?.Content ?? response;
 
@@ -615,12 +716,30 @@ Return ONLY the corrected JSON, nothing else.";
             validationHistory.AddSystemMessage(validationPrompt);
             validationHistory.AddUserMessage($"Add the required 'message' field to this JSON:\n\n{response}");
 
+            // Log what we're sending to the model for validation
+            var validationHistorySummary = SerializeChatHistoryForLogging(validationHistory);
+            Logger.LogInformation("[MODEL_CALL] === VALIDATION CALL START ===\nChat History ({Count} messages):\n{History}\nSettings: No tool calling",
+                validationHistory.Count, validationHistorySummary);
+
+            var validationStartTime = DateTime.UtcNow;
+
             var validationSettings = new OpenAIPromptExecutionSettings();
             var validatedResponse = await chatCompletionService.GetChatMessageContentsAsync(
                 validationHistory,
                 validationSettings,
                 kernel,
                 cancellationToken: cancellationToken);
+
+            var validationDuration = DateTime.UtcNow - validationStartTime;
+            var validatedResponseMessages = validatedResponse.Select((msg, idx) =>
+            {
+                var role = msg.Role.ToString();
+                var content = msg.Content ?? "";
+                var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
+                return $"[{idx}] {role}: {contentPreview}";
+            }).ToList();
+            Logger.LogInformation("[MODEL_CALL] === VALIDATION CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
+                validationDuration.TotalMilliseconds, validatedResponse.Count(), string.Join("\n", validatedResponseMessages));
 
             var validatedMessage = validatedResponse.FirstOrDefault()?.Content ?? response;
             var validatedJson = ExtractJsonFromResponse(validatedMessage);
