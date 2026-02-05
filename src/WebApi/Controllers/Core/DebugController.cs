@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using WebApi.Configuration;
 using WebApi.Data;
 
@@ -31,22 +31,21 @@ public class DebugController : ControllerBase
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> TestAiConnection(
-        [FromServices] Kernel kernel,
+        [FromServices] IChatClient chatClient,
         [FromServices] ILogger<DebugController> logger)
     {
         try
         {
             const string testPrompt = "Say 'AI connection successful' in exactly those words, nothing else.";
 
-            var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-            var chatHistory = new ChatHistory();
-            chatHistory.AddUserMessage(testPrompt);
+            var agent = new ChatClientAgent(chatClient, "You are a helpful assistant.");
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.User, testPrompt)
+            };
 
-            var result = await chatCompletionService.GetChatMessageContentsAsync(
-                chatHistory,
-                cancellationToken: HttpContext.RequestAborted);
-
-            var responseText = result.FirstOrDefault()?.Content ?? string.Empty;
+            var response = await agent.RunAsync(messages, cancellationToken: HttpContext.RequestAborted);
+            var responseText = response.Text ?? string.Empty;
 
             logger.LogInformation("AI connection test successful. Response received: {Response}", responseText);
 
@@ -85,22 +84,21 @@ public class DebugController : ControllerBase
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> GetAiJoke(
-        [FromServices] Kernel kernel,
+        [FromServices] IChatClient chatClient,
         [FromServices] ILogger<DebugController> logger)
     {
         try
         {
             const string prompt = "Tell me a short programming joke";
 
-            var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-            var chatHistory = new ChatHistory();
-            chatHistory.AddUserMessage(prompt);
+            var agent = new ChatClientAgent(chatClient, "You are a helpful assistant that tells jokes.");
+            var messages = new List<ChatMessage>
+            {
+                new(ChatRole.User, prompt)
+            };
 
-            var result = await chatCompletionService.GetChatMessageContentsAsync(
-                chatHistory,
-                cancellationToken: HttpContext.RequestAborted);
-
-            var joke = result.FirstOrDefault()?.Content ?? "I couldn't think of a joke right now.";
+            var response = await agent.RunAsync(messages, cancellationToken: HttpContext.RequestAborted);
+            var joke = response.Text ?? "I couldn't think of a joke right now.";
 
             logger.LogInformation("AI joke endpoint invoked successfully. Joke length: {Length}", joke.Length);
 

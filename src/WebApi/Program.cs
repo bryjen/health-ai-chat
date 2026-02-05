@@ -1,9 +1,9 @@
+using Microsoft.Agents.AI.DevUI;
 using Microsoft.EntityFrameworkCore;
 using WebApi.Configuration;
 using WebApi.Data;
 using WebApi.Middleware;
 using WebApi.Repositories;
-using WebApi.Services.AI.Plugins;
 using WebApi.Services.AI.Scenarios;
 using WebApi.Services.Chat;
 using WebApi.Services.Chat.Conversations;
@@ -18,6 +18,8 @@ builder.Services
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<AppDbContext>();
+
+builder.AddDevUI();
 
 var corsEnabled = builder.Services.ConfigureCors(builder.Configuration);
 builder.Services.ConfigureAppOptions(builder.Configuration);
@@ -50,8 +52,6 @@ builder.Services.AddScoped<VectorStoreRepository>();
 // Health chat services
 builder.Services.AddScoped<VectorStoreService>();
 builder.Services.AddScoped<ConversationContextService>();
-builder.Services.AddScoped<SymptomTrackerPlugin>();
-builder.Services.AddScoped<AssessmentPlugin>();
 builder.Services.AddScoped<HealthChatScenario>();
 builder.Services.AddScoped<ResponseRouterService>();
 builder.Services.AddScoped<StatusInformationSerializer>();
@@ -93,6 +93,7 @@ if (app.Environment.IsProduction())
     app.UseHttpsRedirection();
 }
 
+
 // Routing must come before response caching
 app.UseRouting();
 
@@ -112,6 +113,8 @@ app.UseAuthorization();
 app.ConfigureScalarDocs();
 
 app.MapControllers();
+
+app.MapDevUI();
 
 // SignalR hub
 app.MapHub<WebApi.Hubs.ChatHub>("/hubs/chat");

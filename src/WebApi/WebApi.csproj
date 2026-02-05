@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn> $(NoWarn); 1591; <!-- Semantic Kernel experimental API usage --> SKEXP0001; SKEXP0011 </NoWarn>
+    <NoWarn> $(NoWarn); 1591 </NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,6 +18,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.8.0-beta.1" />
+    <PackageReference Include="Azure.Identity" Version="1.18.0-beta.2" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.2.0-preview.1.26063.2" />
+
+    <PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.260128.1" />
+    <PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-preview.260128.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.0.0-preview.260128.1" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.260128.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-preview.260128.1" />
+      <!--
+      <PackageReference Include="Microsoft.Agents.AI.Hosting.OpenAI" Version="1.0.0-alpha.260128.1" />
+      <PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="1.0.0-preview.260128.1" />
+        -->
+
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
@@ -58,9 +72,6 @@
 
     <!-- security -->
     <PackageReference Include="NetEscapades.AspNetCore.SecurityHeaders" Version="0.21.0" />
-
-    <!-- AI / Semantic Kernel -->
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.0.1" />
 
     <!-- SignalR -->
     <PackageReference Include="Microsoft.AspNetCore.SignalR" Version="1.2.9" />

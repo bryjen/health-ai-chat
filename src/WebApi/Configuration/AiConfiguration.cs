@@ -1,91 +1,88 @@
+using Azure;
+using Azure.AI.OpenAI;
+using Microsoft.Agents.AI.OpenAI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Embeddings;
 using WebApi.Configuration.Options;
+using WebApi.Services.AI.Tools;
+using WebApi.Services.AI.Workflows;
 
 namespace WebApi.Configuration;
 
 public static class AiConfiguration
 {
     /// <summary>
-    /// Configures AI-related services, including singleton AI services and keyed kernels.
+    /// Configures AI-related services for Agent Framework using Microsoft.Agents.AI.OpenAI.
     /// Misconfiguration of Azure OpenAI will throw and fail fast.
     /// </summary>
     public static void ConfigureAi(this IServiceCollection services)
     {
-        // Register singleton AI services (extracted from kernel creation)
-        services.AddSingleton<IChatCompletionService>(sp =>
+        // Validate configuration first
+        services.AddOptions<AzureOpenAiSettings>()
+            .BindConfiguration(AzureOpenAiSettings.SectionName)
+            .Validate(settings =>
+            {
+                if (string.IsNullOrWhiteSpace(settings.Endpoint) ||
+                    string.IsNullOrWhiteSpace(settings.DeploymentName) ||
+                    string.IsNullOrWhiteSpace(settings.ApiKey))
+                {
+                    throw new InvalidOperationException(
+                        "Azure OpenAI is not properly configured. " +
+                        "Please set 'AzureOpenAI:Endpoint', 'AzureOpenAI:ApiKey', and 'AzureOpenAI:DeploymentName' in configuration.");
+                }
+                return true;
+            })
+            .ValidateOnStart();
+
+        // Register IChatClient for Agent Framework (Azure OpenAI)
+        services.AddSingleton<IChatClient>(sp =>
         {
             var settings = sp.GetRequiredService<IOptions<AzureOpenAiSettings>>().Value;
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("AiConfiguration");
 
-            if (string.IsNullOrWhiteSpace(settings.Endpoint) ||
-                string.IsNullOrWhiteSpace(settings.DeploymentName) ||
-                string.IsNullOrWhiteSpace(settings.ApiKey))
-            {
-                throw new InvalidOperationException(
-                    "Azure OpenAI is not properly configured. " +
-                    "Please set 'AzureOpenAI:Endpoint', 'AzureOpenAI:ApiKey', and 'AzureOpenAI:DeploymentName' in configuration.");
-            }
+            var endpoint = new Uri(settings.Endpoint);
+            var credential = new AzureKeyCredential(settings.ApiKey);
+            var client = new AzureOpenAIClient(endpoint, credential);
+            var chatClient = client.GetChatClient(settings.DeploymentName).AsIChatClient();
 
-            var builder = Kernel.CreateBuilder();
-            builder.AddAzureOpenAIChatCompletion(
-                deploymentName: settings.DeploymentName,
-                endpoint: settings.Endpoint,
-                apiKey: settings.ApiKey);
-
-            var kernel = builder.Build();
-            var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
-
-            logger.LogInformation("Azure OpenAI ChatCompletionService configured with deployment: {DeploymentName}",
+            logger.LogInformation("Azure OpenAI IChatClient configured with deployment: {DeploymentName}",
                 settings.DeploymentName);
 
-            return chatCompletionService;
+            return chatClient;
         });
 
-        // Register embedding service as singleton (if available)
-        services.AddSingleton<ITextEmbeddingGenerationService>(sp =>
+        // Register IEmbeddingGenerator for embeddings (Azure OpenAI)
+        // Register as generic IEmbeddingGenerator<string, Embedding<float>> for use with GenerateAsync extension method
+        services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
         {
             var settings = sp.GetRequiredService<IOptions<AzureOpenAiSettings>>().Value;
             var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("AiConfiguration");
 
             var embeddingDeploymentName = settings.EmbeddingDeploymentName ?? settings.DeploymentName;
-            var builder = Kernel.CreateBuilder();
-            builder.AddAzureOpenAITextEmbeddingGeneration(
-                deploymentName: embeddingDeploymentName,
-                endpoint: settings.Endpoint,
-                apiKey: settings.ApiKey);
 
-            var kernel = builder.Build();
-            var embeddingService = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
+            // Create Azure OpenAI client and use Microsoft.Agents.AI.OpenAI extension method
+            var endpoint = new Uri(settings.Endpoint);
+            var credential = new AzureKeyCredential(settings.ApiKey);
+            var embeddingGenerator = new AzureOpenAIClient(endpoint, credential)
+                .GetEmbeddingClient(embeddingDeploymentName)
+                .AsIEmbeddingGenerator();
 
-            logger.LogInformation("Azure OpenAI TextEmbeddingGenerationService configured with deployment: {EmbeddingDeploymentName}",
+            logger.LogInformation("Azure OpenAI IEmbeddingGenerator configured with deployment: {EmbeddingDeploymentName}",
                 embeddingDeploymentName);
 
-            return embeddingService;
+            return embeddingGenerator;
         });
 
-        // Register singleton kernel for services that need a Kernel instance (e.g., DebugController, VectorStoreService)
-        services.AddSingleton<Kernel>(sp =>
-        {
-            var chatCompletionService = sp.GetRequiredService<IChatCompletionService>();
-            var embeddingService = sp.GetService<ITextEmbeddingGenerationService>();
+        // Also register as non-generic IEmbeddingGenerator for backward compatibility
+        services.AddSingleton<IEmbeddingGenerator>(sp => sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>());
 
-            var kernelBuilder = Kernel.CreateBuilder();
-            kernelBuilder.Services.AddSingleton(chatCompletionService);
+        // Register workflows (scoped - they use scoped services like ConversationContextService)
+        services.AddScoped<AssessmentWorkflow>();
+        services.AddScoped<SymptomTrackingWorkflow>();
 
-            if (embeddingService != null)
-            {
-                kernelBuilder.Services.AddSingleton(embeddingService);
-            }
-
-            return kernelBuilder.Build();
-        });
-
-        // Register keyed kernel for HealthChatScenario (reuses the same singleton Kernel instance)
-        // Note: Plugins are registered per-request in HealthChatScenario since they need conversation context
-        services.AddKeyedSingleton<Kernel>("health", (sp, _) => sp.GetRequiredService<Kernel>());
+        // Register tools (scoped - they use scoped services like ConversationContextService)
+        services.AddScoped<AssessmentTools>();
+        services.AddScoped<SymptomTrackerTools>();
     }
 }

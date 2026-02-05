@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Embeddings;
+using Microsoft.Extensions.AI;
 using WebApi.Data;
 using WebApi.Models;
 using WebApi.Repositories;
@@ -8,7 +7,7 @@ using WebApi.Repositories;
 namespace WebApi.Services.VectorStore;
 
 public class VectorStoreService(
-    Kernel kernel,
+    IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
     VectorStoreRepository vectorStoreRepository,
     AppDbContext context,
     ILogger<VectorStoreService> logger)
@@ -24,12 +23,11 @@ public class VectorStoreService(
                 return;
             }
 
-            // Generate embedding using Semantic Kernel
-            var embeddingService = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-            var embeddingData = await embeddingService.GenerateEmbeddingAsync(messageContent);
+            // Generate embedding using Agent Framework
+            var embeddingData = await embeddingGenerator.GenerateAsync(messageContent, cancellationToken: default);
             
             // Convert to float array
-            var vector = embeddingData.ToArray();
+            var vector = embeddingData.Vector.ToArray();
             
             // Validate embedding dimensions (database expects 1536 for vector(1536))
             const int expectedDimensions = 1536;
@@ -84,10 +82,9 @@ public class VectorStoreService(
         try
         {
             // Generate embedding for the query text
-            var embeddingService = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-            var embeddingData = await embeddingService.GenerateEmbeddingAsync(queryText);
+            var embeddingData = await embeddingGenerator.GenerateAsync(queryText, cancellationToken: default);
             
-            var queryVector = embeddingData.ToArray();
+            var queryVector = embeddingData.Vector.ToArray();
             
             // Validate embedding dimensions
             const int expectedDimensions = 1536;

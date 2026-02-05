@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace WebApi.Configuration.Options;
 
 /// <summary>
-/// Azure OpenAI settings for Semantic Kernel.
+/// Azure OpenAI settings for Agent Framework.
 /// Uses a standard Azure OpenAI resource endpoint and API key.
 /// </summary>
 [SuppressMessage("ReSharper", "PropertyCanBeMadeInitOnly.Global")]

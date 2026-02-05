@@ -1,36 +1,19 @@
-using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Repositories;
+using WebApi.Services.AI.Workflows;
 using WebApi.Services.Chat.Conversations;
 
-namespace WebApi.Services.AI.Plugins;
+namespace WebApi.Services.AI.Tools;
 
 /// <summary>
-/// Represents an episode weight mapping for assessment creation.
-/// Semantic Kernel can serialize this as a structured parameter.
+/// Agent Framework tools for assessment operations.
+/// Converted from AssessmentPlugin - provides tools that workflows can call.
 /// </summary>
-public class EpisodeWeight
-{
-    [Description("The episode ID")]
-    public int EpisodeId { get; set; }
-
-    [Description("The weight for this episode (0.0 to 1.0)")]
-    public decimal Weight { get; set; }
-}
-
-/// <summary>
-/// Semantic Kernel plugin for assessment operations.
-/// Provides kernel functions that the AI can call to create and update assessments.
-/// </summary>
-public class AssessmentPlugin(
+public class AssessmentTools(
     AssessmentRepository assessmentRepository,
     ConversationContextService contextService,
-    ILogger<AssessmentPlugin> logger)
+    ILogger<AssessmentTools> logger)
 {
     private ClientConnection? _clientConnection;
 
@@ -60,24 +43,18 @@ public class AssessmentPlugin(
         return _clientConnection;
     }
 
-    [KernelFunction]
-    [Description("CreateAssessment: MANDATORY FUNCTION TO CALL when user requests an assessment, diagnosis, or evaluation. You MUST call this function immediately when user says 'create assessment', 'generate assessment', 'assessment please', or any similar request. DO NOT describe assessments in text - CALL THIS FUNCTION. Parameters: hypothesis (required - your diagnosis as string, e.g. 'viral infection'), confidence (required - 0.0-1.0 decimal, use 0.7 if unsure), differentials (optional - array of alternative diagnoses, can be empty []), reasoning (optional - explanation), recommendedAction (optional - 'see-gp'/'urgent-care'/'emergency'/'self-care', defaults to 'see-gp'). Episode weights are automatically assigned from active symptoms.")]
-    [SuppressMessage("ReSharper", "UnusedMember.Global")]
-    public async Task<object> CreateAssessmentAsync(
-        [Description("REQUIRED: Your primary diagnosis or hypothesis as a string (e.g. 'viral infection', 'influenza', 'migraine')")]
-            string hypothesis,
-        [Description("REQUIRED: Confidence level 0.0 to 1.0 decimal (use 0.7 if unsure, 0.8-0.9 if confident)")]
-            decimal confidence,
-        [Description("OPTIONAL: Alternative diagnoses as an array of strings. Can be empty array [] or null if none.")]
-            List<string>? differentials = null,
-        [Description("OPTIONAL: Your reasoning or explanation for the diagnosis")]
-            string reasoning = "",
-        [Description("OPTIONAL: Recommended action - 'see-gp', 'urgent-care', 'emergency', or 'self-care' (defaults to 'see-gp')")]
-            string recommendedAction = "see-gp",
-        [Description("OPTIONAL: Negative finding IDs as an array of integers. Can be empty array [] or null if none.")]
-            List<int>? negativeFindingIds = null)
+    /// <summary>
+    /// Creates an assessment. Call this when user requests an assessment, diagnosis, or evaluation.
+    /// </summary>
+    public async Task<AssessmentResult> CreateAssessmentAsync(
+        string hypothesis,
+        decimal confidence,
+        List<string>? differentials = null,
+        string reasoning = "",
+        string recommendedAction = "see-gp",
+        List<int>? negativeFindingIds = null)
     {
-        logger.LogInformation("[ASSESSMENT_PLUGIN] CreateAssessmentAsync CALLED with hypothesis='{Hypothesis}', confidence={Confidence}, recommendedAction='{RecommendedAction}'",
+        logger.LogInformation("[ASSESSMENT_TOOLS] CreateAssessmentAsync CALLED with hypothesis='{Hypothesis}', confidence={Confidence}, recommendedAction='{RecommendedAction}'",
             hypothesis, confidence, recommendedAction);
         try
         {
@@ -87,7 +64,11 @@ public class AssessmentPlugin(
             if (!context.ConversationId.HasValue)
             {
                 logger.LogError("Cannot create assessment: ConversationId is null. UserId: {UserId}", context.UserId);
-                return "Error: Cannot create assessment because no conversation is active. Please start a conversation first.";
+                return new AssessmentResult
+                {
+                    NextRecommendedAction = "SubmitFinalResponse",
+                    ErrorMessage = "Cannot create assessment because no conversation is active. Please start a conversation first."
+                };
             }
 
             // Send "Generating assessment..." status (fire-and-forget)
@@ -156,29 +137,10 @@ public class AssessmentPlugin(
             var resultAsStr = $"Created assessment {created.Id}: {hypothesis} (confidence: {confidence:P0}). Recommended action (for the user): {recommendedAction}.";
             logger.LogInformation(resultAsStr);
 
-            return new
+            return new AssessmentResult
             {
                 NextRecommendedAction = "CompleteAssessment",
-                CreatedAssessment = new
-                {
-                    created.Id,
-                    created.UserId,
-                    created.ConversationId,
-                    created.Hypothesis,
-                    created.Confidence,
-                    created.Differentials,
-                    created.Reasoning,
-                    created.RecommendedAction,
-                    created.NegativeFindingIds,
-                    created.CreatedAt,
-                    LinkedEpisodes = created.LinkedEpisodes.Select(link => new
-                    {
-                        link.AssessmentId,
-                        link.EpisodeId,
-                        link.Weight,
-                        link.Reasoning
-                    }).ToList()
-                }
+                CreatedAssessment = created
             };
         }
         catch (Exception ex)
@@ -190,9 +152,9 @@ public class AssessmentPlugin(
             logger.LogError("CreateAssessment parameters - Hypothesis: {Hypothesis}, Confidence: {Confidence}, Differentials: {Differentials}, Reasoning: {Reasoning}, RecommendedAction: {RecommendedAction}",
                 hypothesis, confidence, differentials != null ? string.Join(", ", differentials) : "null", reasoning, recommendedAction);
 
-            // Return a more helpful error message that doesn't confuse the AI
+            // Return a more helpful error message
             var errorMessage = "Failed to create assessment due to a technical error. Please try again or contact support if the issue persists.";
-            return new
+            return new AssessmentResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = errorMessage
@@ -200,18 +162,18 @@ public class AssessmentPlugin(
         }
     }
 
-    [KernelFunction]
-    [Description("UpdateAssessment: YOU MUST CALL THIS FUNCTION to update an existing assessment when you need to refine or change a previously created assessment. Use this when you have new information that changes the diagnosis, confidence level, or recommendations. Parameters: assessmentId (required - the ID of the assessment to update), then any fields you want to update (hypothesis, confidence, differentials, reasoning, recommendedAction, episodeWeights, negativeFindingIds).")]
-    [SuppressMessage("ReSharper", "UnusedMember.Global")]
-    public async Task<object> UpdateAssessmentAsync(
-        [Description("The ID of the assessment to update")] int assessmentId,
-        [Description("Updated hypothesis or diagnosis")] string? hypothesis = null,
-        [Description("Updated confidence level from 0.0 to 1.0")] decimal? confidence = null,
-        [Description("Updated list of alternative diagnoses")] List<string>? differentials = null,
-        [Description("Updated reasoning")] string? reasoning = null,
-        [Description("Updated recommended action")] string? recommendedAction = null,
-        [Description("Updated list of episode weights. Each weight maps an episode ID to a weight value (0.0 to 1.0). Example: [{\"episodeId\": 1, \"weight\": 0.8}, {\"episodeId\": 2, \"weight\": 0.6}]")] List<EpisodeWeight>? episodeWeights = null,
-        [Description("Updated list of negative finding IDs")] List<int>? negativeFindingIds = null)
+    /// <summary>
+    /// Updates an existing assessment when you need to refine or change it.
+    /// </summary>
+    public async Task<AssessmentResult> UpdateAssessmentAsync(
+        int assessmentId,
+        string? hypothesis = null,
+        decimal? confidence = null,
+        List<string>? differentials = null,
+        string? reasoning = null,
+        string? recommendedAction = null,
+        List<EpisodeWeight>? episodeWeights = null,
+        List<int>? negativeFindingIds = null)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -241,7 +203,7 @@ public class AssessmentPlugin(
 
             if (updated == null)
             {
-                return new
+                return new AssessmentResult
                 {
                     NextRecommendedAction = "SubmitFinalResponse",
                     ErrorMessage = $"Assessment {assessmentId} not found."
@@ -259,7 +221,7 @@ public class AssessmentPlugin(
             clientConnection?.SendAnalyzingAssessment();
 
             logger.LogInformation("Updated assessment {AssessmentId}", assessmentId);
-            return new
+            return new AssessmentResult
             {
                 NextRecommendedAction = "Continue",
                 UpdatedAssessment = updated
@@ -268,7 +230,7 @@ public class AssessmentPlugin(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error updating assessment {AssessmentId}", assessmentId);
-            return new
+            return new AssessmentResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = $"Error updating assessment: {ex.Message}"
@@ -276,13 +238,12 @@ public class AssessmentPlugin(
         }
     }
 
-    [KernelFunction]
-    [Description("CompleteAssessment: MANDATORY FUNCTION TO CALL immediately after CreateAssessment(). You MUST call this function right after creating an assessment to finalize it. This marks the assessment as complete and transitions the conversation to the recommending phase. Parameters: assessmentId (optional - defaults to the current assessment if not provided).")]
-    [SuppressMessage("ReSharper", "UnusedMember.Global")]
-    public async Task<object> CompleteAssessmentAsync(
-        [Description("OPTIONAL: The ID of the assessment to complete. If not provided, uses the current assessment.")] int? assessmentId = null)
+    /// <summary>
+    /// Completes an assessment. Call this immediately after CreateAssessment to finalize it.
+    /// </summary>
+    public async Task<AssessmentResult> CompleteAssessmentAsync(int? assessmentId = null)
     {
-        logger.LogInformation("[ASSESSMENT_PLUGIN] CompleteAssessmentAsync CALLED with assessmentId={AssessmentId}", assessmentId);
+        logger.LogInformation("[ASSESSMENT_TOOLS] CompleteAssessmentAsync CALLED with assessmentId={AssessmentId}", assessmentId);
         try
         {
             var context = GetContext();
@@ -291,10 +252,10 @@ public class AssessmentPlugin(
             if (!context.ConversationId.HasValue)
             {
                 logger.LogError("Cannot complete assessment: ConversationId is null. UserId: {UserId}", context.UserId);
-                return new
+                return new AssessmentResult
                 {
                     NextRecommendedAction = "SubmitFinalResponse",
-                    ErrorMessage = "Error: Cannot complete assessment because no conversation is active."
+                    ErrorMessage = "Cannot complete assessment because no conversation is active."
                 };
             }
 
@@ -311,10 +272,10 @@ public class AssessmentPlugin(
             else
             {
                 logger.LogError("Cannot complete assessment: No assessment ID provided and no current assessment exists");
-                return new
+                return new AssessmentResult
                 {
                     NextRecommendedAction = "SubmitFinalResponse",
-                    ErrorMessage = "Error: No assessment found to complete. Please create an assessment first."
+                    ErrorMessage = "No assessment found to complete. Please create an assessment first."
                 };
             }
 
@@ -325,7 +286,7 @@ public class AssessmentPlugin(
             clientConnection?.SendAssessmentComplete(targetAssessmentId, $"Assessment {targetAssessmentId} completed.");
 
             logger.LogInformation("Completed assessment {AssessmentId} for conversation {ConversationId}", targetAssessmentId, context.ConversationId.Value);
-            return new
+            return new AssessmentResult
             {
                 NextRecommendedAction = "Continue",
                 CompletedAssessmentId = targetAssessmentId
@@ -335,7 +296,7 @@ public class AssessmentPlugin(
         {
             logger.LogError(ex, "Error completing assessment. Exception type: {ExceptionType}, Message: {Message}",
                 ex.GetType().Name, ex.Message);
-            return new
+            return new AssessmentResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = $"Failed to complete assessment due to a technical error: {ex.Message}"

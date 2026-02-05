@@ -1,24 +1,21 @@
-using System.ComponentModel;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
 using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Repositories;
-using WebApi.Services.Chat;
+using WebApi.Services.AI.Workflows;
 using WebApi.Services.Chat.Conversations;
 
-namespace WebApi.Services.AI.Plugins;
+namespace WebApi.Services.AI.Tools;
 
 /// <summary>
-/// Semantic Kernel plugin for symptom tracking operations.
-/// Provides kernel functions that the AI can call to create and manage symptom episodes.
+/// Agent Framework tools for symptom tracking operations.
+/// Converted from SymptomTrackerPlugin - provides tools that workflows can call.
 /// </summary>
-public class SymptomTrackerPlugin(
+public class SymptomTrackerTools(
     SymptomRepository symptomRepository,
     EpisodeRepository episodeRepository,
     NegativeFindingRepository negativeFindingRepository,
     ConversationContextService contextService,
-    ILogger<SymptomTrackerPlugin> logger)
+    ILogger<SymptomTrackerTools> logger)
 {
     private ClientConnection? _clientConnection;
 
@@ -37,11 +34,12 @@ public class SymptomTrackerPlugin(
         return _clientConnection;
     }
 
-    [KernelFunction]
-    [Description("CreateSymptomWithEpisode: YOU MUST CALL THIS FUNCTION immediately when a user reports ANY symptom. This function saves the symptom to the database. DO NOT just acknowledge symptoms in text - you MUST call this function to track them. Parameters: name (required - the symptom name like 'headache', 'fever', 'cough'), description (optional additional details). Returns the created episode ID which you can use with UpdateEpisode.")]
-    public async Task<object> CreateSymptomWithEpisodeAsync(
-        [Description("The name of the symptom")] string name,
-        [Description("Optional description of the symptom")] string? description = null)
+    /// <summary>
+    /// Creates a symptom with an episode. Call this immediately when a user reports ANY symptom.
+    /// </summary>
+    public async Task<SymptomEpisodeResult> CreateSymptomWithEpisodeAsync(
+        string name,
+        string? description = null)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -55,7 +53,7 @@ public class SymptomTrackerPlugin(
             if (context.RecentEpisodesBySymptom.TryGetValue(name, out var recentEpisode))
             {
                 logger.LogInformation("Found recent episode {EpisodeId} for symptom {SymptomName}", recentEpisode.Id, name);
-                return new
+                return new SymptomEpisodeResult
                 {
                     NextRecommendedAction = "Continue",
                     Message = $"Found existing episode {recentEpisode.Id} for {name}. Use UpdateEpisode to add details.",
@@ -80,7 +78,7 @@ public class SymptomTrackerPlugin(
             clientConnection?.SendSymptomAdded(episode.Id, name, null);
 
             logger.LogInformation("Created episode {EpisodeId} for symptom {SymptomName}", episode.Id, name);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "Continue",
                 CreatedEpisode = episode
@@ -89,7 +87,7 @@ public class SymptomTrackerPlugin(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error creating symptom with episode for {SymptomName}", name);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = $"Error creating episode: {ex.Message}"
@@ -97,16 +95,17 @@ public class SymptomTrackerPlugin(
         }
     }
 
-    [KernelFunction]
-    [Description("UpdateEpisode: YOU MUST CALL THIS FUNCTION to add details to an episode (severity, location, frequency, triggers, relievers, pattern). Call this every time you learn new information about a symptom episode. Parameters: episodeId (required), then any details you learned (severity 1-10, location, frequency constant/intermittent/occasional, triggers list, relievers list, pattern description).")]
-    public async Task<object> UpdateEpisodeAsync(
-        [Description("The ID of the episode to update")] int episodeId,
-        [Description("Severity on a scale of 1-10")] int? severity = null,
-        [Description("Location where the symptom occurs")] string? location = null,
-        [Description("Frequency: constant, intermittent, or occasional")] string? frequency = null,
-        [Description("List of triggers")] List<string>? triggers = null,
-        [Description("List of relievers")] List<string>? relievers = null,
-        [Description("Pattern description (e.g., 'worse in morning')")] string? pattern = null)
+    /// <summary>
+    /// Updates an episode with additional details (severity, location, frequency, triggers, relievers, pattern).
+    /// </summary>
+    public async Task<SymptomEpisodeResult> UpdateEpisodeAsync(
+        int episodeId,
+        int? severity = null,
+        string? location = null,
+        string? frequency = null,
+        List<string>? triggers = null,
+        List<string>? relievers = null,
+        string? pattern = null)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -124,7 +123,7 @@ public class SymptomTrackerPlugin(
 
             if (episode == null)
             {
-                return new
+                return new SymptomEpisodeResult
                 {
                     NextRecommendedAction = "SubmitFinalResponse",
                     ErrorMessage = $"Episode {episodeId} not found."
@@ -149,7 +148,7 @@ public class SymptomTrackerPlugin(
             clientConnection?.SendSymptomUpdated(episodeId, symptomName);
 
             logger.LogInformation("Updated episode {EpisodeId}, stage: {Stage}", episodeId, episode.Stage);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "Continue",
                 UpdatedEpisode = episode
@@ -158,7 +157,7 @@ public class SymptomTrackerPlugin(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error updating episode {EpisodeId}", episodeId);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = $"Error updating episode: {ex.Message}"
@@ -166,11 +165,12 @@ public class SymptomTrackerPlugin(
         }
     }
 
-    [KernelFunction]
-    [Description("LinkEpisodeToExisting: Links an episode to another related episode, marking it as 'linked' stage.")]
-    public async Task<object> LinkEpisodeToExistingAsync(
-        [Description("The ID of the episode to link")] int episodeId,
-        [Description("The ID of the related episode")] int relatedEpisodeId)
+    /// <summary>
+    /// Links an episode to another related episode, marking it as 'linked' stage.
+    /// </summary>
+    public async Task<SymptomEpisodeResult> LinkEpisodeToExistingAsync(
+        int episodeId,
+        int relatedEpisodeId)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -182,7 +182,7 @@ public class SymptomTrackerPlugin(
             var success = await episodeRepository.LinkEpisodesAsync(episodeId, relatedEpisodeId);
             if (!success)
             {
-                return new
+                return new SymptomEpisodeResult
                 {
                     NextRecommendedAction = "SubmitFinalResponse",
                     ErrorMessage = $"Episode {episodeId} not found."
@@ -199,7 +199,7 @@ public class SymptomTrackerPlugin(
 
             clientConnection?.SendCompleted($"Linked {symptomName} episode");
             logger.LogInformation("Linked episode {EpisodeId} to {RelatedEpisodeId}", episodeId, relatedEpisodeId);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "Continue",
                 Message = $"Linked episode {episodeId} to episode {relatedEpisodeId}.",
@@ -209,7 +209,7 @@ public class SymptomTrackerPlugin(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error linking episodes {EpisodeId} to {RelatedEpisodeId}", episodeId, relatedEpisodeId);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = $"Error linking episodes: {ex.Message}"
@@ -217,10 +217,10 @@ public class SymptomTrackerPlugin(
         }
     }
 
-    [KernelFunction]
-    [Description("ResolveEpisode: Marks an episode as resolved, setting its status to 'resolved' and recording the resolution date.")]
-    public async Task<object> ResolveEpisodeAsync(
-        [Description("The ID of the episode to resolve")] int episodeId)
+    /// <summary>
+    /// Marks an episode as resolved, setting its status to 'resolved' and recording the resolution date.
+    /// </summary>
+    public async Task<SymptomEpisodeResult> ResolveEpisodeAsync(int episodeId)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -230,7 +230,7 @@ public class SymptomTrackerPlugin(
             var success = await episodeRepository.ResolveEpisodeAsync(episodeId);
             if (!success)
             {
-                return new
+                return new SymptomEpisodeResult
                 {
                     NextRecommendedAction = "SubmitFinalResponse",
                     ErrorMessage = $"Episode {episodeId} not found."
@@ -250,7 +250,7 @@ public class SymptomTrackerPlugin(
             clientConnection?.SendSymptomResolved(episodeId, symptomName);
 
             logger.LogInformation("Resolved episode {EpisodeId}", episodeId);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "Continue",
                 ResolvedEpisode = episode
@@ -259,7 +259,7 @@ public class SymptomTrackerPlugin(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error resolving episode {EpisodeId}", episodeId);
-            return new
+            return new SymptomEpisodeResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
                 ErrorMessage = $"Error resolving episode: {ex.Message}"
@@ -267,11 +267,12 @@ public class SymptomTrackerPlugin(
         }
     }
 
-    [KernelFunction]
-    [Description("RecordNegativeFinding: YOU MUST CALL THIS FUNCTION when a user explicitly denies having a symptom (e.g., 'no fever', 'I don't have nausea'). This helps rule out conditions. Parameters: symptomName (required - the symptom they don't have), episodeId (optional - link to a related episode).")]
-    public async Task<object> RecordNegativeFindingAsync(
-        [Description("The name of the symptom the user does not have")] string symptomName,
-        [Description("Optional episode ID if this relates to a specific episode")] int? episodeId = null)
+    /// <summary>
+    /// Records a negative finding when a user explicitly denies having a symptom.
+    /// </summary>
+    public async Task<NegativeFindingResult> RecordNegativeFindingAsync(
+        string symptomName,
+        int? episodeId = null)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -290,33 +291,27 @@ public class SymptomTrackerPlugin(
 
             clientConnection?.SendCompleted($"Recorded that {symptomName} is not present");
             logger.LogInformation("Recorded negative finding for {SymptomName}", symptomName);
-            return new
+            return new NegativeFindingResult
             {
                 NextRecommendedAction = "Continue",
-                RecordedNegativeFinding = new
-                {
-                    negativeFinding.Id,
-                    negativeFinding.UserId,
-                    negativeFinding.EpisodeId,
-                    negativeFinding.SymptomName,
-                    negativeFinding.ReportedAt
-                }
+                Id = negativeFinding.Id,
+                UserId = negativeFinding.UserId,
+                EpisodeId = negativeFinding.EpisodeId,
+                SymptomName = negativeFinding.SymptomName,
+                ReportedAt = negativeFinding.ReportedAt
             };
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error recording negative finding for {SymptomName}", symptomName);
-            return new
-            {
-                NextRecommendedAction = "SubmitFinalResponse",
-                ErrorMessage = $"Error recording negative finding: {ex.Message}"
-            };
+            throw; // Let workflow handle errors
         }
     }
 
-    [KernelFunction]
-    [Description("GetActiveEpisodes: CALL THIS FUNCTION to check what symptoms/episodes the user currently has active. Use this before creating new episodes to avoid duplicates. Returns a list of active episode IDs and their stages.")]
-    public object GetActiveEpisodes()
+    /// <summary>
+    /// Gets active episodes for the current user.
+    /// </summary>
+    public ActiveEpisodesResult GetActiveEpisodes()
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -329,17 +324,17 @@ public class SymptomTrackerPlugin(
 
         clientConnection?.SendCompleted("Retrieved active episodes");
 
-        return new
+        return new ActiveEpisodesResult
         {
             NextRecommendedAction = "Continue",
             ActiveEpisodes = episodes
         };
     }
 
-    [KernelFunction]
-    [Description("GetSymptomHistory: CALL THIS FUNCTION to get past episodes for a specific symptom. Use this to understand symptom patterns over time. Parameters: symptomName (required - the symptom to get history for).")]
-    public async Task<object> GetSymptomHistoryAsync(
-        [Description("The name of the symptom to get history for")] string symptomName)
+    /// <summary>
+    /// Gets past episodes for a specific symptom.
+    /// </summary>
+    public async Task<SymptomHistoryResult> GetSymptomHistoryAsync(string symptomName)
     {
         var context = GetContext();
         var clientConnection = GetClientConnection();
@@ -352,7 +347,7 @@ public class SymptomTrackerPlugin(
 
             clientConnection?.SendCompleted($"Retrieved history for {symptomName}");
 
-            return new
+            return new SymptomHistoryResult
             {
                 NextRecommendedAction = "Continue",
                 SymptomHistory = episodes,
@@ -362,9 +357,10 @@ public class SymptomTrackerPlugin(
         catch (Exception ex)
         {
             logger.LogError(ex, "Error getting symptom history for {SymptomName}", symptomName);
-            return new
+            return new SymptomHistoryResult
             {
                 NextRecommendedAction = "SubmitFinalResponse",
+                SymptomName = symptomName,
                 ErrorMessage = $"Error getting history: {ex.Message}"
             };
         }
