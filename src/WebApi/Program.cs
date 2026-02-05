@@ -53,12 +53,14 @@ builder.Services.AddScoped<SymptomTrackerPlugin>();
 builder.Services.AddScoped<AssessmentPlugin>();
 builder.Services.AddScoped<HealthChatScenario>();
 builder.Services.AddScoped<ResponseRouterService>();
+builder.Services.AddScoped<StatusInformationSerializer>();
+builder.Services.AddScoped<HealthResponseParser>();
+builder.Services.AddScoped<EntityChangeTracker>();
 builder.Services.AddScoped<HealthChatOrchestrator>();
 builder.Services.AddScoped<WebApi.Services.Graph.GraphDataService>();
 
 // SignalR
 builder.Services.AddSignalR();
-builder.Services.AddScoped<IStatusUpdateService, StatusUpdateService>();
 
 var app = builder.Build();
 

@@ -48,7 +48,7 @@ public class SignalRDocumentFilter : IDocumentFilter
                     {
                         // Create paths exactly like controllers - with GET operations
                         AddPath(paths, addMethod, "/signalr/connection", "SignalR - Connection", "Establish WebSocket Connection", GetConnectionDocumentation());
-                        AddPath(paths, addMethod, "/signalr/requests", "SignalR - Requests", "SendMessage Method", GetRequestsDocumentation());
+                        AddPath(paths, addMethod, "/signalr/requests", "SignalR - Requests", "ProcessMessage Method", GetRequestsDocumentation());
                         AddPath(paths, addMethod, "/signalr/responses", "SignalR - Responses", "Response Structures and Events", GetResponsesDocumentation());
                     }
                 }
@@ -233,7 +233,7 @@ public class SignalRDocumentFilter : IDocumentFilter
             Sends a health-related message to the AI assistant and processes it through the health chat orchestrator. The system automatically tracks symptoms, generates assessments, and provides medical guidance.
 
 
-            **Method:** `SendMessage`
+            **Method:** `ProcessMessage`
 
 
             **Parameters:**
@@ -273,7 +273,7 @@ public class SignalRDocumentFilter : IDocumentFilter
             try
             {
               const response = await connection.invoke(
-                'SendMessage', 
+                'ProcessMessage', 
                 'I\'ve been experiencing headaches for the past 3 days', 
                 null
               );
@@ -311,7 +311,7 @@ public class SignalRDocumentFilter : IDocumentFilter
             **JavaScript Example:**
             ```javascript
             try {
-              const response = await connection.invoke('SendMessage', message, null);
+              const response = await connection.invoke('ProcessMessage', message, null);
             } catch (err) {
               if (err.errorType === 'HubException') {
                 console.error('Hub error:', err.message);
@@ -327,9 +327,9 @@ public class SignalRDocumentFilter : IDocumentFilter
             Documentation for response structures and real-time events from the Chat Hub.
 
 
-            ### SendMessage Response
+            ### ProcessMessage Response
 
-            The `SendMessage` method returns a `HealthChatResponse` containing the AI response message, conversation ID, and tracked entity changes.
+            The `ProcessMessage` method returns a `HealthChatResponse` containing the AI response message, conversation ID, and tracked entity changes.
 
 
             **Response Structure:**

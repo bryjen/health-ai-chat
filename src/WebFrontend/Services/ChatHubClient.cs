@@ -100,7 +100,7 @@ public class ChatHubClient(ITokenProvider tokenProvider)
             throw new InvalidOperationException("Chat connection is not established.");
         }
 
-        var response = await _hubConnection.InvokeAsync<HealthChatResponse>("SendMessage", message, conversationId);
+        var response = await _hubConnection.InvokeAsync<HealthChatResponse>("ProcessMessage", message, conversationId);
         return response;
     }
 

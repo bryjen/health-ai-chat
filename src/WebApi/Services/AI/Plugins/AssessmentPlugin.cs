@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Repositories;
 using WebApi.Services.Chat;
@@ -16,7 +17,7 @@ public class EpisodeWeight
 {
     [Description("The episode ID")]
     public int EpisodeId { get; set; }
-    
+
     [Description("The weight for this episode (0.0 to 1.0)")]
     public decimal Weight { get; set; }
 }
@@ -33,18 +34,18 @@ public class AssessmentPlugin(
     private ConversationContext? _context;
     private Guid _userId;
     private Guid? _conversationId;
-    private IStatusUpdateService? _statusUpdateService;
+    private ClientConnection? _clientConnection;
 
     /// <summary>
-    /// Sets the current conversation context, user ID, conversation ID, and status update service for this plugin instance.
+    /// Sets the current conversation context, user ID, conversation ID, and client connection for this plugin instance.
     /// Called before kernel function execution.
     /// </summary>
-    public void SetContext(ConversationContext context, Guid userId, Guid conversationId, IStatusUpdateService? statusUpdateService = null)
+    public void SetContext(ConversationContext context, Guid userId, Guid conversationId, ClientConnection? clientConnection = null)
     {
         _context = context;
         _userId = userId;
         _conversationId = conversationId;
-        _statusUpdateService = statusUpdateService;
+        _clientConnection = clientConnection;
     }
 
     [KernelFunction]
@@ -62,11 +63,8 @@ public class AssessmentPlugin(
             throw new InvalidOperationException("Context not set. Call SetContext before using plugin functions.");
         }
 
-        // Send "Generating assessment..." status
-        if (_statusUpdateService != null)
-        {
-            await _statusUpdateService.SendGeneratingAssessmentAsync();
-        }
+        // Send "Generating assessment..." status (fire-and-forget)
+        _clientConnection?.SendGeneratingAssessment();
 
         try
         {
@@ -119,21 +117,16 @@ public class AssessmentPlugin(
             _context.CurrentAssessment = created;
             _context.Phase = ConversationPhase.Assessing;
 
-            // Send status updates
-            if (_statusUpdateService != null)
-            {
-                await _statusUpdateService.SendAssessmentCreatedAsync(created.Id, created.Hypothesis, created.Confidence);
-                await Task.Delay(500); // Small delay for visibility
-                await _statusUpdateService.SendAnalyzingAssessmentAsync();
-                await Task.Delay(800); // Additional delay before final response
-            }
+            // Send status updates (fire-and-forget)
+            _clientConnection?.SendAssessmentCreated(created.Id, created.Hypothesis, created.Confidence);
+            _clientConnection?.SendAnalyzingAssessment();
 
             logger.LogInformation("Created assessment {AssessmentId} for conversation {ConversationId}", created.Id, _conversationId.Value);
             return $"Created assessment {created.Id}: {hypothesis} (confidence: {confidence:P0}). Recommended action: {recommendedAction}.";
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating assessment. Exception type: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+            logger.LogError(ex, "Error creating assessment. Exception type: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}",
                 ex.GetType().Name, ex.Message, ex.StackTrace);
             // Return a more helpful error message
             return $"Error creating assessment: {ex.GetType().Name} - {ex.Message}";
@@ -203,14 +196,9 @@ public class AssessmentPlugin(
                 _context.CurrentAssessment = updated;
             }
 
-            // Send status updates
-            if (_statusUpdateService != null)
-            {
-                await _statusUpdateService.SendAssessmentCreatedAsync(updated.Id, updated.Hypothesis, updated.Confidence);
-                await Task.Delay(500);
-                await _statusUpdateService.SendAnalyzingAssessmentAsync();
-                await Task.Delay(800);
-            }
+            // Send status updates (fire-and-forget)
+            _clientConnection?.SendAssessmentCreated(updated.Id, updated.Hypothesis, updated.Confidence);
+            _clientConnection?.SendAnalyzingAssessment();
 
             logger.LogInformation("Updated assessment {AssessmentId}", assessmentId);
             return $"Updated assessment {assessmentId}.";

@@ -8,6 +8,7 @@ using Microsoft.SemanticKernel.Embeddings;
 using Web.Common.DTOs.AI;
 using Web.Common.DTOs.Health;
 using WebApi.Configuration.Options;
+using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Services.AI.Plugins;
 using WebApi.Services.Chat;
@@ -19,7 +20,14 @@ namespace WebApi.Services.AI.Scenarios;
 /// Concrete implementation of the health chat AI scenario.
 /// Handles symptom tracking and appointment booking conversations.
 /// </summary>
-public partial class HealthChatScenario : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>
+public partial class HealthChatScenario(
+    [FromKeyedServices("health")] Kernel kernel,
+    VectorStoreService vectorStoreService,
+    IOptions<VectorStoreSettings> vectorStoreSettings,
+    ConversationContextService contextService,
+    IServiceProvider serviceProvider,
+    ILogger<HealthChatScenario> logger)
+    : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>(kernel, logger)
 {
     private const string SystemPromptTemplate = @"You are a helpful healthcare assistant. CRITICAL: You MUST use the available functions to accomplish tasks. DO NOT just describe actions in text - you MUST call the actual functions.
 
@@ -95,31 +103,15 @@ REQUIREMENTS:
 - Do NOT include other fields at the root level (like ""symptoms"" or ""questions"") - only ""message"", ""appointment"", and ""symptomChanges""
 - Focus on calling functions and gathering information first. Format your final response as JSON only after all function calls are complete.";
 
-    private readonly VectorStoreService _vectorStoreService;
-    private readonly VectorStoreSettings _vectorStoreSettings;
-    private readonly ConversationContextService _contextService;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly VectorStoreSettings _vectorStoreSettings = vectorStoreSettings.Value;
 
-    public HealthChatScenario(
-        [FromKeyedServices("health")] Kernel kernel,
-        VectorStoreService vectorStoreService,
-        IOptions<VectorStoreSettings> vectorStoreSettings,
-        ConversationContextService contextService,
-        IServiceProvider serviceProvider,
-        ILogger<HealthChatScenario> logger)
-        : base(kernel, logger)
-    {
-        _vectorStoreService = vectorStoreService;
-        _vectorStoreSettings = vectorStoreSettings.Value;
-        _contextService = contextService;
-        _serviceProvider = serviceProvider;
-    }
-
+    /// <inheritdoc/>
     protected override string GetSystemPrompt()
     {
         return SystemPromptTemplate;
     }
 
+    /// <inheritdoc/>
     protected override async Task<string?> GetEmbeddingsContextAsync(
         HealthChatScenarioRequest input,
         CancellationToken cancellationToken = default)
@@ -128,6 +120,7 @@ REQUIREMENTS:
         return null;
     }
 
+    /// <inheritdoc/>
     protected override ChatHistory BuildChatHistory(HealthChatScenarioRequest input, string? context)
     {
         // Not used - ExecuteAsync is overridden and builds chat history directly
@@ -135,25 +128,26 @@ REQUIREMENTS:
         return new ChatHistory();
     }
 
+    /// <inheritdoc/>
     public override async Task<HealthChatScenarioResponse> ExecuteAsync(
         HealthChatScenarioRequest input,
         CancellationToken cancellationToken = default)
     {
-        return await ExecuteAsyncInternal(input, cancellationToken, (IStatusUpdateService?)null);
+        return await ExecuteAsyncInternal(input, cancellationToken, (ClientConnection?)null);
     }
 
     public async Task<HealthChatScenarioResponse> ExecuteAsyncInternal(
         HealthChatScenarioRequest input,
         CancellationToken cancellationToken,
-        IStatusUpdateService? statusUpdateService)
+        ClientConnection? clientConnection)
     {
-        return await ExecuteAsyncImpl(input, cancellationToken, statusUpdateService);
+        return await ExecuteAsyncImpl(input, cancellationToken, clientConnection);
     }
 
     private async Task<HealthChatScenarioResponse> ExecuteAsyncImpl(
         HealthChatScenarioRequest input,
         CancellationToken cancellationToken,
-        IStatusUpdateService? statusUpdateService)
+        ClientConnection? clientConnection)
     {
         // Track status updates sent during processing
         var statusUpdatesSent = new List<object>();
@@ -161,24 +155,18 @@ REQUIREMENTS:
         try
         {
             // Hydrate conversation context
-            var conversationContext = await _contextService.HydrateContextAsync(
+            var conversationContext = await contextService.HydrateContextAsync(
                 input.UserId,
                 input.ConversationId);
 
-            // Set connectionId on statusUpdateService if available
-            if (statusUpdateService != null && input.ConnectionId != null)
-            {
-                statusUpdateService.SetConnectionId(input.ConnectionId);
-            }
-
             // Create plugins and set their context
-            var symptomTrackerPlugin = _serviceProvider.GetRequiredService<SymptomTrackerPlugin>();
+            var symptomTrackerPlugin = serviceProvider.GetRequiredService<SymptomTrackerPlugin>();
             symptomTrackerPlugin.SetContext(conversationContext, input.UserId);
 
-            var assessmentPlugin = _serviceProvider.GetRequiredService<AssessmentPlugin>();
+            var assessmentPlugin = serviceProvider.GetRequiredService<AssessmentPlugin>();
             if (input.ConversationId.HasValue)
             {
-                assessmentPlugin.SetContext(conversationContext, input.UserId, input.ConversationId.Value, statusUpdateService);
+                assessmentPlugin.SetContext(conversationContext, input.UserId, input.ConversationId.Value, clientConnection);
             }
 
             // Create a kernel instance for this request with plugins
@@ -240,11 +228,18 @@ REQUIREMENTS:
                 cancellationToken);
 
             // Flush context changes
-            await _contextService.FlushContextAsync(conversationContext);
+            await contextService.FlushContextAsync(conversationContext);
 
             var response = CreateResponse(responseText);
+            // Get tracked status updates from client connection if available
+            if (clientConnection != null)
+            {
+                statusUpdatesSent = clientConnection.GetTrackedStatusUpdates();
+            }
             response.StatusUpdatesSent = statusUpdatesSent;
             response.ExplicitChanges = explicitChanges;
+
+            Logger.LogInformation("[HEALTH_CHAT_SCENARIO] Returning response with {Count} status updates tracked", statusUpdatesSent.Count);
 
             return response;
         }
@@ -309,14 +304,13 @@ REQUIREMENTS:
             // Extract final response from the last assistant message
             // AutoInvoke has already handled all tool calls and recursion
             var assistantMessage = response.FirstOrDefault();
-            
+
             if (assistantMessage == null)
             {
                 Logger.LogWarning("No assistant message returned from chat completion");
                 // Fallback: get last assistant message from chat history
                 var lastAssistantMessage = chatHistory
-                    .Where(m => m.Role == AuthorRole.Assistant)
-                    .LastOrDefault();
+                    .LastOrDefault(m => m.Role == AuthorRole.Assistant);
 
                 if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
                 {
@@ -334,8 +328,7 @@ REQUIREMENTS:
                 Logger.LogWarning("Assistant message has no content, checking chat history");
                 // Fallback: get last assistant message from chat history
                 var lastAssistantMessage = chatHistory
-                    .Where(m => m.Role == AuthorRole.Assistant)
-                    .LastOrDefault();
+                    .LastOrDefault(m => m.Role == AuthorRole.Assistant);
 
                 if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
                 {
@@ -380,7 +373,7 @@ REQUIREMENTS:
     {
         if (conversationId.HasValue)
         {
-            var messages = await _vectorStoreService.GetConversationMessagesAsync(conversationId.Value);
+            var messages = await vectorStoreService.GetConversationMessagesAsync(conversationId.Value);
             Logger.LogDebug("Retrieved {Count} messages from conversation {ConversationId}",
                 messages.Count, conversationId.Value);
             return messages;
@@ -405,7 +398,7 @@ REQUIREMENTS:
 
         try
         {
-            var relevantPastMessages = await _vectorStoreService.SearchSimilarMessagesAsync(
+            var relevantPastMessages = await vectorStoreService.SearchSimilarMessagesAsync(
                 userId,
                 userMessage,
                 excludeConversationId: conversationId,
@@ -517,7 +510,7 @@ CRITICAL: The ""message"" field is REQUIRED and must be a string. If the respons
                 cancellationToken: cancellationToken);
 
             var formattedMessage = formattedResponse.FirstOrDefault()?.Content ?? response;
-            
+
             // Try to extract JSON from formatted response
             var formattedJson = ExtractJsonFromResponse(formattedMessage);
             if (IsValidJson(formattedJson))
@@ -582,7 +575,7 @@ CRITICAL: The ""message"" field is REQUIRED and must be a string. If the respons
             // Missing message field - request reformatting with stronger prompt
             Logger.LogWarning("Response is missing required 'message' field, requesting reformatting");
             var validationHistory = new ChatHistory();
-            var validationPrompt = @"You are a JSON formatter. The following JSON response is missing the REQUIRED ""message"" field. 
+            var validationPrompt = @"You are a JSON formatter. The following JSON response is missing the REQUIRED ""message"" field.
 
 You MUST add a ""message"" field that is a STRING (not an object or array) containing a natural language response to the user.
 
@@ -607,7 +600,7 @@ Return ONLY the corrected JSON, nothing else.";
 
             var validatedMessage = validatedResponse.FirstOrDefault()?.Content ?? response;
             var validatedJson = ExtractJsonFromResponse(validatedMessage);
-            
+
             if (IsValidJson(validatedJson))
             {
                 // Verify it now has message field
