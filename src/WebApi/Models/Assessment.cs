@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace WebApi.Models;
 
@@ -22,7 +23,9 @@ public class Assessment
     public DateTime CreatedAt { get; set; }
 
     // Navigation properties
+    [JsonIgnore]
     public User? User { get; set; }
+    [JsonIgnore]
     public Conversation? Conversation { get; set; }
     public ICollection<AssessmentEpisodeLink> LinkedEpisodes { get; set; } = new List<AssessmentEpisodeLink>();
 }

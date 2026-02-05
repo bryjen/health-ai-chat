@@ -95,6 +95,12 @@ You: [CALL GetActiveEpisodes()] → [CALL CreateAssessment(hypothesis=""viral in
   - reasoning: Explanation of your diagnosis
 - **The function automatically saves the assessment - you don't need to describe it in your response**
 
+**CRITICAL: After CreateAssessment, you MUST call CompleteAssessment IMMEDIATELY**
+- **IMMEDIATELY after CreateAssessment() completes, you MUST call CompleteAssessment()**
+- **This is MANDATORY - do not skip this step**
+- **CompleteAssessment() finalizes the assessment and transitions to the recommending phase**
+- **Example workflow: CreateAssessment() → CompleteAssessment() → SubmitFinalResponse()**
+
 **Step 4: Final response (MANDATORY)**
 - **CRITICAL: After ALL function calls are complete (including CreateAssessment if requested), you MUST call SubmitFinalResponse() as the very last step**
 - **SubmitFinalResponse is MANDATORY - you MUST call it exactly once at the end**
@@ -114,17 +120,38 @@ CRITICAL: After completing ALL necessary function calls (CreateSymptomWithEpisod
 
 **SubmitFinalResponse is MANDATORY - you MUST call it exactly once at the end of your response.**
 
+**CRITICAL: The 'message' parameter in SubmitFinalResponse is REQUIRED and MUST NOT be empty, null, or whitespace. You MUST ALWAYS provide a natural language response to the user explaining what you did, what the assessment found (if applicable), and what the user should know or do next. The message cannot be empty - you must generate meaningful content.**
+
 Call SubmitFinalResponse with:
-- message: Your natural language response to the user (REQUIRED)
+- message: Your natural language response to the user (REQUIRED - MUST NOT BE EMPTY. Explain what you did, what the assessment found, and what the user should do next. This is the user-facing message they will see.)
 - appointment details: If an appointment is needed, provide urgency, symptoms, duration, etc.
 - symptomChanges: List of symptom changes (e.g., [{""symptom"": ""headache"", ""action"": ""added""}])
 
 **CRITICAL ORDER:**
 1. Call all necessary functions FIRST (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, etc.)
-2. THEN call SubmitFinalResponse() as the final step
-3. Do NOT format JSON manually - SubmitFinalResponse handles structured output
+2. **If CreateAssessment was called, IMMEDIATELY call CompleteAssessment() right after**
+3. THEN call SubmitFinalResponse() with a NON-EMPTY message as the final step
+4. Do NOT format JSON manually - SubmitFinalResponse handles structured output
 
-**Never skip function calls - they must happen before SubmitFinalResponse**";
+**IMPORTANT: Function return values (like CreatedAssessment, UpdatedEpisode) are just confirmations. They do NOT replace your message to the user. You MUST still call SubmitFinalResponse with a proper message explaining what happened and what the user should know.**
+
+**Never skip function calls - they must happen before SubmitFinalResponse**
+
+## Assessment Completion Workflow
+
+**You are a health assessment assistant. Workflow:**
+1. Listen to symptoms
+2. Ask clarifying questions if needed
+3. When you have enough info, CREATE assessment
+4. **IMMEDIATELY call CompleteAssessment after creating**
+
+**CRITICAL: After CreateAssessment, you MUST call CompleteAssessment. This is not optional.**
+
+**🚨 FINAL REMINDER - READ THIS BEFORE RESPONDING:**
+**You MUST call SubmitFinalResponse() as your VERY LAST action. This is not optional.**
+**After calling any functions (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, CompleteAssessment, etc.),**
+**you MUST immediately call SubmitFinalResponse(message=""your response"", ...) to complete your response.**
+**DO NOT end your response without calling SubmitFinalResponse().**";
 
     private readonly VectorStoreSettings _vectorStoreSettings = vectorStoreSettings.Value;
 
@@ -138,9 +165,11 @@ Call SubmitFinalResponse with:
     /// Builds the system prompt with minimal context injection (just active episode names).
     /// This gives the model awareness of what symptoms exist without cluttering the prompt.
     /// </summary>
-    private string BuildSystemPromptWithContext(ConversationContext context)
+    private string BuildSystemPromptWithContext(ConversationContext context, bool justCreatedAssessment = false)
     {
-        var prompt = SystemPromptTemplate;
+        var prompt = @"🚨 CRITICAL: You MUST call SubmitFinalResponse() as your VERY LAST action in EVERY response. This is mandatory and non-negotiable.
+
+" + SystemPromptTemplate;
 
         // Add minimal context: just the names of active symptoms
         // This helps the model know what exists without overwhelming it with details
@@ -163,6 +192,12 @@ Call SubmitFinalResponse with:
         {
             // Even if no symptoms, remind about assessment function
             prompt += "\n\n**REMINDER:** If the user asks for an assessment, you MUST call CreateAssessment() function immediately. Do not describe it - call it.";
+        }
+
+        // Dynamic state-based hint: if assessment was just created, remind to complete it
+        if (justCreatedAssessment)
+        {
+            prompt += "\n\n*** IMPORTANT: Assessment was just created. Call CompleteAssessment NOW. ***";
         }
 
         return prompt;
@@ -298,7 +333,12 @@ Call SubmitFinalResponse with:
             }
 
             // Add current user message
-            chatHistory.AddUserMessage(input.Message);
+            var userMessageWithReminder = input.Message;
+            if (!userMessageWithReminder.EndsWith("Remember to call SubmitFinalResponse() at the end.", StringComparison.OrdinalIgnoreCase))
+            {
+                userMessageWithReminder += "\n\n[REMINDER: After completing all necessary function calls, you MUST call SubmitFinalResponse() as your final step to complete your response.]";
+            }
+            chatHistory.AddUserMessage(userMessageWithReminder);
 
             // Store assessment state before call to detect if one was created
             var assessmentIdBefore = conversationContext.CurrentAssessment?.Id;
@@ -391,7 +431,7 @@ Call SubmitFinalResponse with:
             // Log what we're sending to the model
             var messageCount = chatHistory.Count;
             var totalChars = chatHistory.Sum(m => (m.Content ?? "").Length);
-            var chatHistoryRaw = string.Join("\n", chatHistory.Select((msg, idx) => 
+            var chatHistoryRaw = string.Join("\n", chatHistory.Select((msg, idx) =>
                 $"[{idx}] {msg.Role}: {msg.Content ?? ""}"));
             Logger.LogInformation("[MODEL_CALL] === MAIN CALL START ===\nChat History ({Count} messages, {TotalChars} chars):\n{History}\nSettings: AutoInvokeKernelFunctions=true",
                 messageCount, totalChars, chatHistoryRaw);
@@ -407,7 +447,7 @@ Call SubmitFinalResponse with:
                 cancellationToken: cancellationToken);
 
             var duration = DateTime.UtcNow - startTime;
-            var responseMessagesRaw = string.Join("\n", response.Select((msg, idx) => 
+            var responseMessagesRaw = string.Join("\n", response.Select((msg, idx) =>
                 $"[{idx}] {msg.Role}: {msg.Content ?? ""}"));
             Logger.LogInformation("[MODEL_CALL] === MAIN CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
                 duration.TotalMilliseconds, response.Count(), responseMessagesRaw);
@@ -427,7 +467,7 @@ Call SubmitFinalResponse with:
                 if (_finalResponse != null)
                 {
                     Logger.LogInformation("Using SubmitFinalResponse despite empty assistant message");
-                    
+
                     // Merge tracked status updates from client connection if available
                     var trackedStatusUpdatesEmptyMsg = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
                     if (trackedStatusUpdatesEmptyMsg.Any())
@@ -437,7 +477,7 @@ Call SubmitFinalResponse with:
                         var mergedStatusUpdates = existingStatusUpdates.Concat(trackedStatusUpdatesEmptyMsg).ToList();
                         _finalResponse.StatusUpdatesSent = mergedStatusUpdates;
                     }
-                    
+
                     var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
                     {
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -447,61 +487,52 @@ Call SubmitFinalResponse with:
                     return (jsonResponse, explicitChanges);
                 }
 
-                // If assessment was requested but not created, or SubmitFinalResponse wasn't called, proceed to retry
-                // Don't return early - let the retry logic handle it
-                if (!assessmentRequested && _finalResponse == null)
+                // If we have a valid assistant message in chat history, use it as fallback
+                // Otherwise, continue to retry logic below to request SubmitFinalResponse
+                var lastAssistantMessage = chatHistory
+                    .LastOrDefault(m => m.Role == AuthorRole.Assistant);
+
+                if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
                 {
-                    // Fallback: get last assistant message from chat history
-                    var lastAssistantMessage = chatHistory
-                        .LastOrDefault(m => m.Role == AuthorRole.Assistant);
-
+                    Logger.LogInformation("Using last assistant message from chat history as fallback. Content (raw): {Content}", lastAssistantMessage.Content);
                     // Get tracked status updates from client connection if available
-                    var trackedStatusUpdatesEarlyFallback = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
-                    Logger.LogInformation("Including {Count} tracked status updates in early fallback response", trackedStatusUpdatesEarlyFallback.Count);
-                    
-                    if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
-                    {
-                        Logger.LogInformation("Using last assistant message from chat history as fallback. Content (raw): {Content}", lastAssistantMessage.Content);
-                        // Always return JSON, not plain text
-                        var fallbackResponseFromHistory = new HealthAssistantResponse
-                        {
-                            Message = lastAssistantMessage.Content,
-                            Appointment = null,
-                            SymptomChanges = null,
-                            StatusUpdatesSent = trackedStatusUpdatesEarlyFallback
-                        };
-                        var fallbackJsonFromHistory = JsonSerializer.Serialize(fallbackResponseFromHistory, new JsonSerializerOptions
-                        {
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                            WriteIndented = false
-                        });
-                        return (fallbackJsonFromHistory, explicitChanges);
-                    }
+                    var trackedStatusUpdatesFromHistory = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
+                    Logger.LogInformation("Including {Count} tracked status updates in fallback response from history", trackedStatusUpdatesFromHistory.Count);
 
-                    var errorResponse = new HealthAssistantResponse
+                    // Always return JSON, not plain text
+                    var fallbackResponseFromHistory = new HealthAssistantResponse
                     {
-                        Message = "I apologize, but I couldn't generate a response.",
+                        Message = lastAssistantMessage.Content,
                         Appointment = null,
                         SymptomChanges = null,
-                        StatusUpdatesSent = trackedStatusUpdatesEarlyFallback
+                        StatusUpdatesSent = trackedStatusUpdatesFromHistory
                     };
-                    var errorJson = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
+                    var fallbackJsonFromHistory = JsonSerializer.Serialize(fallbackResponseFromHistory, new JsonSerializerOptions
                     {
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                         WriteIndented = false
                     });
-                    return (errorJson, explicitChanges);
+                    return (fallbackJsonFromHistory, explicitChanges);
                 }
-                // Otherwise, continue to retry logic below
+
+                // No valid message found - continue to retry logic below to request SubmitFinalResponse
             }
 
             // Check if assessment was requested and if it was created
             // An assessment was created if CurrentAssessment exists and has a different ID than before
             var assessmentIdAfter = conversationContext.CurrentAssessment?.Id;
-            var assessmentCreated = assessmentRequested &&
-                assessmentIdAfter.HasValue &&
+            var assessmentCreated = assessmentIdAfter.HasValue &&
                 assessmentIdAfter.Value != (assessmentIdBefore ?? 0);
             var assessmentMissing = assessmentRequested && !assessmentCreated;
+
+            // Safety net #5: If CreateAssessment was called, ensure CompleteAssessment happens
+            // Check if phase is still "Assessing" - if CompleteAssessment was called, it should be "Recommending"
+            var assessmentNeedsCompletion = assessmentCreated && conversationContext.Phase == ConversationPhase.Assessing;
+            if (assessmentNeedsCompletion)
+            {
+                Logger.LogWarning("Assessment {AssessmentId} was created but CompleteAssessment was not called. Forcing completion.", assessmentIdAfter);
+                await ForceCompleteAssessmentAsync(kernel, assessmentIdAfter.Value, conversationContext, clientConnection, cancellationToken);
+            }
 
             // Check if SubmitFinalResponse was called (stored in _finalResponse)
             var submitFinalResponseCalled = _finalResponse != null;
@@ -509,7 +540,7 @@ Call SubmitFinalResponse with:
             if (submitFinalResponseCalled && !assessmentMissing)
             {
                 Logger.LogInformation("SubmitFinalResponse was called, using structured output");
-                
+
                 // Merge tracked status updates from client connection if available
                 var trackedStatusUpdatesNormal = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
                 if (trackedStatusUpdatesNormal.Any())
@@ -520,7 +551,7 @@ Call SubmitFinalResponse with:
                     var mergedStatusUpdates = existingStatusUpdates.Concat(trackedStatusUpdatesNormal).ToList();
                     _finalResponse.StatusUpdatesSent = mergedStatusUpdates;
                 }
-                
+
                 // Serialize the structured response to JSON for backward compatibility
                 var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
                 {
@@ -531,8 +562,11 @@ Call SubmitFinalResponse with:
                 return (jsonResponse, explicitChanges);
             }
 
+            // Check if CompleteAssessment needs to be called (assessment created but phase still Assessing)
+            var completeAssessmentMissing = assessmentCreated && conversationContext.Phase == ConversationPhase.Assessing;
+
             // Determine what needs to be fixed
-            var needsRetry = !submitFinalResponseCalled || assessmentMissing;
+            var needsRetry = !submitFinalResponseCalled || assessmentMissing || completeAssessmentMissing;
             if (needsRetry)
             {
                 var issues = new List<string>();
@@ -540,6 +574,11 @@ Call SubmitFinalResponse with:
                 {
                     Logger.LogWarning("Assessment was requested but CreateAssessment() was not called");
                     issues.Add("CreateAssessment");
+                }
+                if (completeAssessmentMissing)
+                {
+                    Logger.LogWarning("Assessment was created but CompleteAssessment() was not called");
+                    issues.Add("CompleteAssessment");
                 }
                 if (!submitFinalResponseCalled)
                 {
@@ -575,6 +614,18 @@ Call SubmitFinalResponse with:
 
                     retryUserMessage += $"STEP {stepNumber - 1}: Call GetActiveEpisodes()\n";
                     retryUserMessage += $"STEP {stepNumber}: Call CreateAssessment(hypothesis=\"your diagnosis\", confidence=0.7, recommendedAction=\"see-gp\")\n\n";
+                    stepNumber++;
+                }
+
+                if (completeAssessmentMissing)
+                {
+                    retrySystemMessage += $"{stepNumber}. IMMEDIATELY call CompleteAssessment() function:\n";
+                    retrySystemMessage += "   - assessmentId: (optional - defaults to current assessment)\n";
+                    retrySystemMessage += "   Example: CompleteAssessment() or CompleteAssessment(assessmentId=<id>)\n";
+                    retrySystemMessage += "   CRITICAL: You MUST call this right after CreateAssessment.\n\n";
+
+                    retryUserMessage += $"STEP {stepNumber}: Call CompleteAssessment()\n\n";
+                    stepNumber++;
                 }
 
                 if (!submitFinalResponseCalled)
@@ -619,9 +670,17 @@ Call SubmitFinalResponse with:
 
                 // Check if assessment was created in retry
                 var assessmentIdAfterRetry = conversationContext.CurrentAssessment?.Id;
-                var assessmentCreatedAfterRetry = assessmentRequested &&
-                    assessmentIdAfterRetry.HasValue &&
+                var assessmentCreatedAfterRetry = assessmentIdAfterRetry.HasValue &&
                     assessmentIdAfterRetry.Value != (assessmentIdBefore ?? 0);
+
+                // Safety net #5: Check again if CompleteAssessment needs to be called after retry
+                var completeAssessmentStillMissing = (assessmentCreated || assessmentCreatedAfterRetry) &&
+                    conversationContext.Phase == ConversationPhase.Assessing;
+                if (completeAssessmentStillMissing && assessmentIdAfterRetry.HasValue)
+                {
+                    Logger.LogWarning("Assessment {AssessmentId} was created but CompleteAssessment was still not called after retry. Forcing completion.", assessmentIdAfterRetry.Value);
+                    await ForceCompleteAssessmentAsync(kernel, assessmentIdAfterRetry.Value, conversationContext, clientConnection, cancellationToken);
+                }
 
                 // Check again if SubmitFinalResponse was called
                 if (_finalResponse != null)
@@ -634,7 +693,7 @@ Call SubmitFinalResponse with:
                     {
                         Logger.LogInformation("SubmitFinalResponse was called in retry, using structured output");
                     }
-                    
+
                     // Merge tracked status updates from client connection if available
                     var trackedStatusUpdatesRetry = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
                     if (trackedStatusUpdatesRetry.Any())
@@ -644,7 +703,7 @@ Call SubmitFinalResponse with:
                         var mergedStatusUpdates = existingStatusUpdates.Concat(trackedStatusUpdatesRetry).ToList();
                         _finalResponse.StatusUpdatesSent = mergedStatusUpdates;
                     }
-                    
+
                     var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
                     {
                         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -658,11 +717,11 @@ Call SubmitFinalResponse with:
             // Fallback: construct a response from the assistant message if SubmitFinalResponse still wasn't called
             Logger.LogWarning("SubmitFinalResponse was not called even after retry. Constructing fallback response.");
             Logger.LogInformation("Assistant content (raw): {Content}", assistantContent ?? "");
-            
+
             // Get tracked status updates from client connection if available
             var trackedStatusUpdates = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
             Logger.LogInformation("Including {Count} tracked status updates in fallback response", trackedStatusUpdates.Count);
-            
+
             // Always construct a proper JSON response, even if content is plain text
             var fallbackStructuredResponse = new HealthAssistantResponse
             {
@@ -789,9 +848,9 @@ Call SubmitFinalResponse with:
     /// This function submits your final structured response to the user. You MUST call this function exactly once at the end.
     /// </summary>
     [KernelFunction]
-    [Description("SubmitFinalResponse: MANDATORY FINAL STEP. You MUST call this function as the very last step after completing all other function calls (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, etc.). This submits your final structured response. Call this exactly once at the end with your message, appointment details, and symptom changes.")]
-    public string SubmitFinalResponse(
-        [Description("REQUIRED: Your natural language response message to the user")] string message,
+    [Description("SubmitFinalResponse: 🚨 MANDATORY FINAL STEP - YOU MUST CALL THIS FUNCTION AS YOUR VERY LAST ACTION. This is the ONLY way to complete your response. After completing ALL other function calls (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, CompleteAssessment, etc.), you MUST call this function exactly once at the end. DO NOT skip this function. THE MESSAGE PARAMETER IS REQUIRED AND MUST NOT BE EMPTY - you must provide a natural language explanation to the user.")]
+    public object SubmitFinalResponse(
+        [Description("REQUIRED: Your natural language response message to the user. This MUST NOT be empty, null, or whitespace. You must explain what you did, what the assessment found (if applicable), and what the user should know or do next. This is the user-facing message they will see.")] string message,
         [Description("OPTIONAL: Whether an appointment is needed")] bool? appointmentNeeded = null,
         [Description("OPTIONAL: Appointment urgency - 'Emergency', 'High', 'Medium', 'Low', or 'None'")] string? appointmentUrgency = null,
         [Description("OPTIONAL: List of symptoms related to the appointment")] List<string>? appointmentSymptoms = null,
@@ -805,6 +864,13 @@ Call SubmitFinalResponse with:
     {
         Logger.LogInformation("[SUBMIT_FINAL_RESPONSE] *** FUNCTION CALLED *** with message length: {Length}, appointmentNeeded: {AppointmentNeeded}, symptomChanges count: {SymptomChangesCount}",
             message?.Length ?? 0, appointmentNeeded, symptomChanges?.Count ?? 0);
+
+        // Validate message is not empty - if it is, log a warning and use a meaningful fallback
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            Logger.LogWarning("[SUBMIT_FINAL_RESPONSE] WARNING: Message parameter is empty or whitespace! This should not happen. Using fallback message.");
+            message = "I've completed the assessment and updated your health records. Based on the information you provided, I've created an assessment. Is there anything else you'd like to discuss about your symptoms?";
+        }
 
         // Build AppointmentData if any appointment fields are provided
         AppointmentData? appointment = null;
@@ -833,9 +899,14 @@ Call SubmitFinalResponse with:
         }
 
         // Store the final response for retrieval by orchestrator
+        // Ensure message is not null or empty - validation above should have caught this, but double-check
+        var finalMessage = string.IsNullOrWhiteSpace(message)
+            ? "I've completed the assessment and updated your health records. Based on the information you provided, I've created an assessment. Is there anything else you'd like to discuss about your symptoms?"
+            : message;
+
         _finalResponse = new HealthAssistantResponse
         {
-            Message = message ?? "I apologize, but I couldn't generate a response.",
+            Message = finalMessage,
             Appointment = appointment,
             SymptomChanges = symptomChanges,
             StatusUpdatesSent = new List<object>()
@@ -848,7 +919,11 @@ Call SubmitFinalResponse with:
         });
         Logger.LogInformation("[SUBMIT_FINAL_RESPONSE] Stored final response JSON (raw): {Json}", storedJson);
 
-        return "Final response submitted successfully.";
+        return new
+        {
+            NextRecommendedAction = "Complete",
+            FinalResponse = _finalResponse
+        };
     }
 
     protected override HealthChatScenarioResponse CreateResponse(string responseText)
@@ -858,5 +933,55 @@ Call SubmitFinalResponse with:
             Message = responseText,
             StatusUpdatesSent = new List<object>()
         };
+    }
+
+    /// <summary>
+    /// Safety net #5: Forces CompleteAssessment to be called if CreateAssessment was called but CompleteAssessment wasn't.
+    /// </summary>
+    private async Task ForceCompleteAssessmentAsync(
+        Kernel kernel,
+        int assessmentId,
+        ConversationContext conversationContext,
+        ClientConnection? clientConnection,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            Logger.LogInformation("Force completing assessment {AssessmentId}", assessmentId);
+
+            // Get the CompleteAssessment function from the kernel
+            var completeAssessmentFunction = kernel.Plugins
+                .Where(p => p.Name == "Assessment")
+                .SelectMany(p => p)
+                .FirstOrDefault(f => f.Name == "CompleteAssessment");
+
+            if (completeAssessmentFunction != null)
+            {
+                // Call CompleteAssessment directly via kernel
+                var arguments = new KernelArguments();
+                arguments["assessmentId"] = assessmentId;
+
+                var result = await kernel.InvokeAsync(
+                    completeAssessmentFunction,
+                    arguments,
+                    cancellationToken);
+
+                Logger.LogInformation("Force completed assessment {AssessmentId}. Result: {Result}", assessmentId, result.GetValue<string>());
+            }
+            else
+            {
+                // Fallback: manually update the context phase
+                Logger.LogWarning("CompleteAssessment function not found in kernel, manually updating phase");
+                conversationContext.Phase = ConversationPhase.Recommending;
+                clientConnection?.SendAssessmentComplete(assessmentId, $"Assessment {assessmentId} completed.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error force completing assessment {AssessmentId}", assessmentId);
+            // Fallback: manually update the context phase
+            conversationContext.Phase = ConversationPhase.Recommending;
+            clientConnection?.SendAssessmentComplete(assessmentId, $"Assessment {assessmentId} completed.");
+        }
     }
 }

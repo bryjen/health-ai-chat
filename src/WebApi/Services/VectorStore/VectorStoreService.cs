@@ -17,6 +17,13 @@ public class VectorStoreService(
     {
         try
         {
+            // Validate input - embedding API requires non-null, non-empty input
+            if (string.IsNullOrWhiteSpace(messageContent))
+            {
+                logger.LogWarning("Skipping embedding generation for message {MessageId}: message content is null or empty", messageId);
+                return;
+            }
+
             // Generate embedding using Semantic Kernel
             var embeddingService = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
             var embeddingData = await embeddingService.GenerateEmbeddingAsync(messageContent);
@@ -40,7 +47,10 @@ public class VectorStoreService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error storing embedding for message {MessageId}", messageId);
+            logger.LogError(ex, "Error storing embedding for message {MessageId}. Message content length: {Length}, Content preview: {Preview}", 
+                messageId, 
+                messageContent?.Length ?? 0,
+                messageContent != null && messageContent.Length > 100 ? messageContent.Substring(0, 100) + "..." : messageContent ?? "null");
             throw;
         }
     }

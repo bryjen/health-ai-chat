@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace WebApi.Models;
 
@@ -14,6 +15,8 @@ public class Symptom
     public DateTime UpdatedAt { get; set; }
     
     // Navigation properties
+    [JsonIgnore]
     public User? User { get; set; }
+    [JsonIgnore]
     public ICollection<Episode> Episodes { get; set; } = new List<Episode>();
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace WebApi.Models;
 
@@ -13,6 +14,8 @@ public class AssessmentEpisodeLink
     public string? Reasoning { get; set; } // Why this symptom matters
     
     // Navigation properties
+    [JsonIgnore]
     public Assessment? Assessment { get; set; }
+    [JsonIgnore]
     public Episode? Episode { get; set; }
 }

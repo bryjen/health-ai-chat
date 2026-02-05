@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json.Serialization;
 
 namespace WebApi.Models;
 
@@ -13,6 +14,8 @@ public class NegativeFinding
     public DateTime ReportedAt { get; set; }
     
     // Navigation properties
+    [JsonIgnore]
     public User? User { get; set; }
+    [JsonIgnore]
     public Episode? Episode { get; set; }
 }

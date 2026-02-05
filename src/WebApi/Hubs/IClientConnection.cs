@@ -76,6 +76,21 @@ public abstract class ClientConnection
     }
 
     /// <summary>
+    /// Sends an "assessment complete" status update (fire-and-forget).
+    /// </summary>
+    public void SendAssessmentComplete(int assessmentId, string? message = null)
+    {
+        var status = new
+        {
+            type = "assessment-complete",
+            assessmentId = assessmentId,
+            message = message ?? "Assessment completed.",
+            timestamp = DateTime.UtcNow
+        };
+        SendStatusUpdate(status);
+    }
+
+    /// <summary>
     /// Sends a "symptom added" status update with details (fire-and-forget).
     /// </summary>
     public void SendSymptomAdded(int episodeId, string symptomName, string? location = null)
