@@ -1,4 +1,5 @@
 using Microsoft.Agents.AI.DevUI;
+using Microsoft.Agents.AI.Hosting;
 using Microsoft.EntityFrameworkCore;
 using WebApi.Configuration;
 using WebApi.Data;
@@ -34,7 +35,7 @@ builder.Services.ConfigureResponseCompression(builder.Environment);
 builder.Services.ConfigureResponseCaching(builder.Environment);
 builder.Services.ConfigureOpenTelemetry(builder.Configuration, builder.Logging, builder.Environment);
 builder.Services.ConfigureAuthServices(builder.Configuration);
-builder.Services.ConfigureAi();
+var agentBuilders = builder.ConfigureAi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ConversationService>();
 
@@ -115,6 +116,14 @@ app.ConfigureScalarDocs();
 app.MapControllers();
 
 app.MapDevUI();
+
+// Map agent endpoints for DevUI and API access
+app.MapOpenAIChatCompletions(agentBuilders.HealthChatAgent);
+app.MapOpenAIChatCompletions(agentBuilders.AssessmentWorkflowAgent);
+app.MapOpenAIChatCompletions(agentBuilders.SymptomTrackingWorkflowAgent);
+
+// Map agent discovery endpoint for DevUI
+app.MapAgentDiscovery("/agents");
 
 // SignalR hub
 app.MapHub<WebApi.Hubs.ChatHub>("/hubs/chat");

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using WebApi.Hubs;
@@ -105,35 +104,39 @@ public class SymptomTrackingWorkflow(
                 .ToList();
 
             var systemPrompt = @"You are a healthcare assistant. Extract symptom names from the user's message.
-Return a JSON array of symptom names mentioned, e.g. [""headache"", ""fever""].
-Only return symptom names, nothing else.";
+Return a JSON object with a 'symptoms' array containing the symptom names mentioned.
+Example: {""symptoms"": [""headache"", ""fever""]}
+If no symptoms are found, return {""symptoms"": []}.";
 
             var contextInfo = activeSymptomNames.Any()
                 ? $"\n\nCurrent active symptoms: {string.Join(", ", activeSymptomNames)}"
                 : "";
 
-            // Create agent with JSON output
+            // Create agent with structured output support
             var agent = new ChatClientAgent(chatClient, new ChatClientAgentOptions
             {
                 ChatOptions = new()
                 {
                     Instructions = systemPrompt + contextInfo,
-                    ResponseFormat = ChatResponseFormat.Json
+                    ResponseFormat = ChatResponseFormat.ForJsonSchema<DetectedSymptoms>()
                 }
             });
 
-            // Run agent
-            var response = await agent.RunAsync(userMessage);
-            var content = response.Text ?? "";
+            // Run agent with structured output
+            var response = await agent.RunAsync<DetectedSymptoms>(userMessage);
 
-            logger.LogDebug("LLM detected symptoms: {Content}", content);
-
-            var symptoms = JsonSerializer.Deserialize<List<string>>(content, new JsonSerializerOptions
+            if (response.Result == null)
             {
-                PropertyNameCaseInsensitive = true
-            });
+                logger.LogWarning("Failed to extract symptoms, using fallback");
+                // Fallback: simple keyword detection
+                var commonSymptoms = new[] { "headache", "fever", "cough", "pain", "nausea", "dizziness" };
+                return commonSymptoms.Where(s => userMessage.ToLowerInvariant().Contains(s)).ToList();
+            }
 
-            return symptoms ?? new List<string>();
+            var symptoms = response.Result.Symptoms ?? new List<string>();
+            logger.LogDebug("LLM detected {Count} symptoms: {Symptoms}", symptoms.Count, string.Join(", ", symptoms));
+
+            return symptoms;
         }
         catch (Exception ex)
         {

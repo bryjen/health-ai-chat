@@ -85,6 +85,14 @@ public class SymptomData
 }
 
 /// <summary>
+/// Detected symptoms from user message.
+/// </summary>
+public class DetectedSymptoms
+{
+    public List<string> Symptoms { get; set; } = new();
+}
+
+/// <summary>
 /// Episode weight mapping for assessment updates.
 /// </summary>
 public class EpisodeWeight
