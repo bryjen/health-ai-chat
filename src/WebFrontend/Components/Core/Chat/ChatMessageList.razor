@@ -1,4 +1,5 @@
 @namespace WebFrontend.Components.Core.Chat
+@using System.Linq
 @implements IAsyncDisposable
 
 <div @ref="_scrollContainer" data-chat-scroll-container class="flex flex-col flex-1 min-h-0 overflow-y-auto scrollbar-hide px-4 pt-6 pb-8 pt-16">
@@ -17,9 +18,9 @@
                     @if (!message.IsUser && message.StatusInformation.Any())
                     {
                         <div class="flex flex-col gap-2 mb-2">
-                            @foreach (var status in message.StatusInformation)
+                            @foreach (var (status, index) in message.StatusInformation.Select((s, i) => (s, i)))
                             {
-                                <StatusInformationRenderer @key="@($"{status.Type}-{status.Timestamp.Ticks}")" StatusInformation="status" />
+                                <StatusInformationRenderer @key="@($"{status.Type}-{status.Timestamp.Ticks}-{index}")" StatusInformation="status" />
                             }
                         </div>
                     }

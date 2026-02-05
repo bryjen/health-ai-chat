@@ -8,7 +8,7 @@ namespace WebApi.Middleware;
 /// Middleware to log HTTP requests and responses with timing, correlation IDs, and context.
 /// </summary>
 public class RequestLoggingMiddleware(
-    RequestDelegate next, 
+    RequestDelegate next,
     ILogger<RequestLoggingMiddleware> logger)
 {
     private static readonly HashSet<string> SensitiveHeaders = new(StringComparer.OrdinalIgnoreCase)
@@ -23,18 +23,18 @@ public class RequestLoggingMiddleware(
     {
         var stopwatch = Stopwatch.StartNew();
         var correlationId = GetOrCreateCorrelationId(context);
-        
+
         // Add correlation ID to response headers for client tracing
         context.Response.Headers["X-Correlation-Id"] = correlationId;
-        
+
         // Log request
         LogRequest(context, correlationId);
-        
+
         // Capture original response body stream
         var originalBodyStream = context.Response.Body;
         using var responseBody = new MemoryStream();
         context.Response.Body = responseBody;
-        
+
         try
         {
             await next(context);
@@ -42,10 +42,10 @@ public class RequestLoggingMiddleware(
         finally
         {
             stopwatch.Stop();
-            
+
             // Log response
             LogResponse(context, correlationId, stopwatch.ElapsedMilliseconds, responseBody);
-            
+
             // Copy response body back to original stream
             // This will include any error response written by GlobalExceptionHandlerMiddleware
             responseBody.Seek(0, SeekOrigin.Begin);
@@ -56,12 +56,12 @@ public class RequestLoggingMiddleware(
     private static string GetOrCreateCorrelationId(HttpContext context)
     {
         // Check if correlation ID exists in request headers
-        if (context.Request.Headers.TryGetValue("X-Correlation-Id", out var correlationId) && 
+        if (context.Request.Headers.TryGetValue("X-Correlation-Id", out var correlationId) &&
             !string.IsNullOrWhiteSpace(correlationId))
         {
             return correlationId.ToString();
         }
-        
+
         // Generate new correlation ID
         return Guid.NewGuid().ToString("N")[..16]; // Short format for readability
     }
@@ -71,7 +71,7 @@ public class RequestLoggingMiddleware(
         var request = context.Request;
         var userId = GetUserId(context);
         var ipAddress = GetClientIpAddress(context);
-        
+
         var logData = new Dictionary<string, object?>
         {
             ["CorrelationId"] = correlationId,
@@ -85,6 +85,7 @@ public class RequestLoggingMiddleware(
             ["Headers"] = GetSafeHeaders(request.Headers)
         };
 
+        // Use Debug level for requests to reduce verbosity (errors/warnings will still be logged)
         logger.LogInformation(
             "HTTP Request: {Method} {Path} | CorrelationId: {CorrelationId} | IP: {IP} | UserId: {UserId}",
             request.Method,
@@ -100,10 +101,10 @@ public class RequestLoggingMiddleware(
         var userId = GetUserId(context);
         var statusCode = response.StatusCode;
         var logLevel = GetLogLevel(statusCode);
-        
+
         var responseSize = responseBody.Length;
         var responseBodyText = string.Empty;
-        
+
         // Only capture response body for errors (and limit size)
         if (statusCode >= 400 && responseSize < 5000)
         {
@@ -127,15 +128,18 @@ public class RequestLoggingMiddleware(
             logData["ResponseBody"] = responseBodyText;
         }
 
+        // Use Debug level for successful requests (2xx, 3xx) to reduce verbosity
+        var responseLogLevel = statusCode < 400 ? LogLevel.Debug : logLevel;
+
         logger.Log(
-            logLevel,
+            responseLogLevel,
             "HTTP Response: {StatusCode} | Duration: {Duration}ms | CorrelationId: {CorrelationId} | UserId: {UserId} | Size: {ResponseSize} bytes",
             statusCode,
             durationMs,
             correlationId,
             userId ?? "(anonymous)",
             responseSize);
-        
+
         // Log response body for errors
         if (!string.IsNullOrEmpty(responseBodyText))
         {
@@ -168,7 +172,7 @@ public class RequestLoggingMiddleware(
     private static Dictionary<string, string> GetSafeHeaders(IHeaderDictionary headers)
     {
         var safeHeaders = new Dictionary<string, string>();
-        
+
         foreach (var header in headers)
         {
             if (SensitiveHeaders.Contains(header.Key))
@@ -180,7 +184,7 @@ public class RequestLoggingMiddleware(
                 safeHeaders[header.Key] = string.Join(", ", header.Value.ToArray());
             }
         }
-        
+
         return safeHeaders;
     }
 

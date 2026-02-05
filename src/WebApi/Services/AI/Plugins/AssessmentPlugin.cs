@@ -9,6 +9,19 @@ using WebApi.Services.Chat;
 namespace WebApi.Services.AI.Plugins;
 
 /// <summary>
+/// Represents an episode weight mapping for assessment creation.
+/// Semantic Kernel can serialize this as a structured parameter.
+/// </summary>
+public class EpisodeWeight
+{
+    [Description("The episode ID")]
+    public int EpisodeId { get; set; }
+    
+    [Description("The weight for this episode (0.0 to 1.0)")]
+    public decimal Weight { get; set; }
+}
+
+/// <summary>
 /// Semantic Kernel plugin for assessment operations.
 /// Provides kernel functions that the AI can call to create and update assessments.
 /// </summary>
@@ -20,32 +33,39 @@ public class AssessmentPlugin(
     private ConversationContext? _context;
     private Guid _userId;
     private Guid? _conversationId;
+    private IStatusUpdateService? _statusUpdateService;
 
     /// <summary>
-    /// Sets the current conversation context, user ID, and conversation ID for this plugin instance.
+    /// Sets the current conversation context, user ID, conversation ID, and status update service for this plugin instance.
     /// Called before kernel function execution.
     /// </summary>
-    public void SetContext(ConversationContext context, Guid userId, Guid conversationId)
+    public void SetContext(ConversationContext context, Guid userId, Guid conversationId, IStatusUpdateService? statusUpdateService = null)
     {
         _context = context;
         _userId = userId;
         _conversationId = conversationId;
+        _statusUpdateService = statusUpdateService;
     }
 
     [KernelFunction]
-    [Description("CreateAssessment: Creates a new assessment with a hypothesis, confidence level, differential diagnoses, reasoning, recommended action, and links to episodes and negative findings that informed this assessment.")]
+    [Description("CreateAssessment: CALL THIS FUNCTION to create a medical assessment. REQUIRED when user asks for assessment or you have enough info for diagnosis. Parameters: hypothesis (your diagnosis), confidence (0.0-1.0, use 0.7 if unsure), differentials (optional alternatives), reasoning (optional), recommendedAction (see-gp/urgent-care/emergency/self-care). Episode weights are automatically assigned from active symptoms.")]
     public async Task<string> CreateAssessmentAsync(
-        [Description("The primary hypothesis or diagnosis")] string hypothesis,
-        [Description("Confidence level from 0.0 to 1.0")] decimal confidence,
-        [Description("Comma-separated list of alternative diagnoses")] string? differentials = null,
-        [Description("Reasoning for this assessment")] string reasoning = "",
-        [Description("Recommended action: self-care, see-gp, urgent-care, or emergency")] string recommendedAction = "see-gp",
-        [Description("JSON object mapping episode IDs to weights, e.g., {\"1\": 0.8, \"2\": 0.6}")] string? episodeWeights = null,
-        [Description("Comma-separated list of negative finding IDs")] string? negativeFindingIds = null)
+        [Description("Your primary diagnosis or hypothesis")] string hypothesis,
+        [Description("Confidence level 0.0 to 1.0 (use 0.7 if unsure)")] decimal confidence,
+        [Description("Alternative diagnoses, comma-separated")] string? differentials = null,
+        [Description("Your reasoning")] string reasoning = "",
+        [Description("Recommended action: see-gp, urgent-care, emergency, or self-care")] string recommendedAction = "see-gp",
+        [Description("Negative finding IDs, comma-separated")] string? negativeFindingIds = null)
     {
         if (_context == null || !_conversationId.HasValue)
         {
             throw new InvalidOperationException("Context not set. Call SetContext before using plugin functions.");
+        }
+
+        // Send "Generating assessment..." status
+        if (_statusUpdateService != null)
+        {
+            await _statusUpdateService.SendGeneratingAssessmentAsync();
         }
 
         try
@@ -58,49 +78,15 @@ public class AssessmentPlugin(
                 ? negativeFindingIds.Split(',').Select(id => int.TryParse(id.Trim(), out var nid) ? nid : (int?)null).Where(id => id.HasValue).Select(id => id!.Value).ToList()
                 : _context.NegativeFindings.Select(nf => nf.Id).ToList();
 
-            // Parse episode weights from JSON object
+            // Automatically assign episode weights from active episodes
             Dictionary<int, decimal> episodeWeightsDict = new();
-            if (!string.IsNullOrWhiteSpace(episodeWeights))
+            var activeEpisodes = _context.ActiveEpisodes.ToList();
+            if (activeEpisodes.Count > 0)
             {
-                try
+                var defaultWeight = 1.0m / activeEpisodes.Count;
+                foreach (var episode in activeEpisodes)
                 {
-                    var weightsJson = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(episodeWeights);
-                    if (weightsJson != null)
-                    {
-                        foreach (var kvp in weightsJson)
-                        {
-                            if (int.TryParse(kvp.Key, out var episodeId))
-                            {
-                                try
-                                {
-                                    var weight = kvp.Value.GetDecimal();
-                                    episodeWeightsDict[episodeId] = Math.Clamp(weight, 0, 1);
-                                }
-                                catch
-                                {
-                                    // Skip invalid weight values
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (JsonException ex)
-                {
-                    logger.LogWarning(ex, "Failed to parse episodeWeights JSON: {EpisodeWeights}", episodeWeights);
-                }
-            }
-
-            // If no weights provided, use all active episodes with evenly distributed weights
-            if (episodeWeightsDict.Count == 0)
-            {
-                var activeEpisodes = _context.ActiveEpisodes.ToList();
-                if (activeEpisodes.Count > 0)
-                {
-                    var defaultWeight = 1.0m / activeEpisodes.Count;
-                    foreach (var episode in activeEpisodes)
-                    {
-                        episodeWeightsDict[episode.Id] = defaultWeight;
-                    }
+                    episodeWeightsDict[episode.Id] = defaultWeight;
                 }
             }
 
@@ -133,18 +119,29 @@ public class AssessmentPlugin(
             _context.CurrentAssessment = created;
             _context.Phase = ConversationPhase.Assessing;
 
+            // Send status updates
+            if (_statusUpdateService != null)
+            {
+                await _statusUpdateService.SendAssessmentCreatedAsync(created.Id, created.Hypothesis, created.Confidence);
+                await Task.Delay(500); // Small delay for visibility
+                await _statusUpdateService.SendAnalyzingAssessmentAsync();
+                await Task.Delay(800); // Additional delay before final response
+            }
+
             logger.LogInformation("Created assessment {AssessmentId} for conversation {ConversationId}", created.Id, _conversationId.Value);
             return $"Created assessment {created.Id}: {hypothesis} (confidence: {confidence:P0}). Recommended action: {recommendedAction}.";
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error creating assessment");
-            return $"Error creating assessment: {ex.Message}";
+            logger.LogError(ex, "Error creating assessment. Exception type: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}", 
+                ex.GetType().Name, ex.Message, ex.StackTrace);
+            // Return a more helpful error message
+            return $"Error creating assessment: {ex.GetType().Name} - {ex.Message}";
         }
     }
 
     [KernelFunction]
-    [Description("UpdateAssessment: Updates an existing assessment with new information, refining the hypothesis, confidence, or recommendations.")]
+    [Description("UpdateAssessment: YOU MUST CALL THIS FUNCTION to update an existing assessment when you need to refine or change a previously created assessment. Use this when you have new information that changes the diagnosis, confidence level, or recommendations. Parameters: assessmentId (required - the ID of the assessment to update), then any fields you want to update (hypothesis, confidence, differentials, reasoning, recommendedAction, episodeWeights, negativeFindingIds).")]
     public async Task<string> UpdateAssessmentAsync(
         [Description("The ID of the assessment to update")] int assessmentId,
         [Description("Updated hypothesis or diagnosis")] string? hypothesis = null,
@@ -152,7 +149,7 @@ public class AssessmentPlugin(
         [Description("Updated comma-separated list of alternative diagnoses")] string? differentials = null,
         [Description("Updated reasoning")] string? reasoning = null,
         [Description("Updated recommended action")] string? recommendedAction = null,
-        [Description("Updated JSON object mapping episode IDs to weights, e.g., {\"1\": 0.8, \"2\": 0.6}")] string? episodeWeights = null,
+        [Description("Updated list of episode weights. Each weight maps an episode ID to a weight value (0.0 to 1.0). Example: [{\"episodeId\": 1, \"weight\": 0.8}, {\"episodeId\": 2, \"weight\": 0.6}]")] List<EpisodeWeight>? episodeWeights = null,
         [Description("Updated comma-separated list of negative finding IDs")] string? negativeFindingIds = null)
     {
         if (_context == null)
@@ -174,36 +171,14 @@ public class AssessmentPlugin(
                 negativeFindingIdsList = negativeFindingIds.Split(',').Select(id => int.TryParse(id.Trim(), out var nid) ? nid : (int?)null).Where(id => id.HasValue).Select(id => id!.Value).ToList();
             }
 
-            // Parse episode weights from JSON object if provided
+            // Convert episode weights list to dictionary if provided
             Dictionary<int, decimal>? episodeWeightsDict = null;
-            if (!string.IsNullOrWhiteSpace(episodeWeights))
+            if (episodeWeights != null && episodeWeights.Count > 0)
             {
-                try
+                episodeWeightsDict = new Dictionary<int, decimal>();
+                foreach (var weight in episodeWeights)
                 {
-                    var weightsJson = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(episodeWeights);
-                    if (weightsJson != null)
-                    {
-                        episodeWeightsDict = new Dictionary<int, decimal>();
-                        foreach (var kvp in weightsJson)
-                        {
-                            if (int.TryParse(kvp.Key, out var episodeId))
-                            {
-                                try
-                                {
-                                    var weight = kvp.Value.GetDecimal();
-                                    episodeWeightsDict[episodeId] = Math.Clamp(weight, 0, 1);
-                                }
-                                catch
-                                {
-                                    // Skip invalid weight values
-                                }
-                            }
-                        }
-                    }
-                }
-                catch (JsonException ex)
-                {
-                    logger.LogWarning(ex, "Failed to parse episodeWeights JSON: {EpisodeWeights}", episodeWeights);
+                    episodeWeightsDict[weight.EpisodeId] = Math.Clamp(weight.Weight, 0, 1);
                 }
             }
 
@@ -226,6 +201,15 @@ public class AssessmentPlugin(
             if (_context.CurrentAssessment != null && _context.CurrentAssessment.Id == assessmentId)
             {
                 _context.CurrentAssessment = updated;
+            }
+
+            // Send status updates
+            if (_statusUpdateService != null)
+            {
+                await _statusUpdateService.SendAssessmentCreatedAsync(updated.Id, updated.Hypothesis, updated.Confidence);
+                await Task.Delay(500);
+                await _statusUpdateService.SendAnalyzingAssessmentAsync();
+                await Task.Delay(800);
             }
 
             logger.LogInformation("Updated assessment {AssessmentId}", assessmentId);

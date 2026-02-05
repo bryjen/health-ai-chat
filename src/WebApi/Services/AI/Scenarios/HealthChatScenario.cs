@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.SemanticKernel;
@@ -5,6 +6,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
 using Microsoft.SemanticKernel.Embeddings;
 using Web.Common.DTOs.AI;
+using Web.Common.DTOs.Health;
 using WebApi.Configuration.Options;
 using WebApi.Models;
 using WebApi.Services.AI.Plugins;
@@ -19,53 +21,43 @@ namespace WebApi.Services.AI.Scenarios;
 /// </summary>
 public partial class HealthChatScenario : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>
 {
-    private const string SystemPromptTemplate = @"You are a helpful healthcare assistant. Your role is to:
-1. Listen to users' health concerns and symptoms
-2. Track symptoms using the available functions - ALWAYS call CreateSymptomWithEpisode when a user reports a symptom
-3. Progressively explore symptoms to understand them better
-4. Assess situations and provide recommendations
-5. Provide helpful health guidance
+    private const string SystemPromptTemplate = @"You are a helpful healthcare assistant. CRITICAL: You MUST use the available functions to accomplish tasks. DO NOT just describe actions in text - you MUST call the actual functions.
 
-## Multi-Turn Behavior
+## MANDATORY FUNCTION CALLING RULES
 
-You can make multiple turns to gather information before responding:
-- Call functions to track symptoms, get episode details, or create assessments
-- Analyze the function results
-- Call additional functions if needed
-- When you have all the information you need, provide your final response without calling any functions
-- You decide when you're done - provide your final answer when you're ready
+**YOU MUST CALL FUNCTIONS - DO NOT JUST DESCRIBE ACTIONS IN TEXT**
 
-## Symptom Tracking
+1. **Symptoms**: When a user mentions ANY symptom, you MUST IMMEDIATELY call CreateSymptomWithEpisode(). Example: user says ""I have a headache"" → call CreateSymptomWithEpisode(name=""headache"")
+2. **Assessments**: When user asks for assessment OR you have enough info, you MUST call CreateAssessment(). Example: user says ""create assessment"" → call CreateAssessment(hypothesis=""your diagnosis"", confidence=0.7, recommendedAction=""see-gp""). DO NOT describe assessments - CALL THE FUNCTION.
+3. **Episode Updates**: When you learn new details about a symptom (severity, location, etc.), you MUST call UpdateEpisode() to save it.
+4. **Negative Findings**: When a user denies having a symptom, you MUST call RecordNegativeFinding().
 
-When a user mentions a symptom:
-1. Check if they have a recent episode of this symptom using GetActiveEpisodes()
-2. If yes: ask ""Is this related to the [symptom] from [date], or something new?""
-   - If same: work with existing episode using UpdateEpisode
-   - If new: CreateSymptomWithEpisode()
-3. If no recent episode: CreateSymptomWithEpisode()
+**IF YOU DON'T CALL THE FUNCTIONS, THE DATA IS NOT SAVED AND THE USER CANNOT SEE IT.**
 
-After creating/identifying an episode, explore it by asking about (one at a time):
-- Severity (1-10 scale)
-- Location (where exactly?)
-- When it started (already captured)
-- Frequency (constant, comes and goes?)
-- Triggers (what makes it worse?)
-- Relievers (what helps?)
-- Pattern (time of day, after activities?)
+## Workflow
 
-Call UpdateEpisode() as you learn each detail. Don't ask about fields already filled.
+**Step 1: User reports symptoms**
+- IMMEDIATELY call CreateSymptomWithEpisode() for EACH symptom mentioned
+- Then call GetActiveEpisodes() to check for existing episodes
+- Ask follow-up questions about severity, location, frequency, triggers, relievers, pattern
+- As you learn each detail, call UpdateEpisode() to save it
 
-When user denies a symptom (""no fever"", ""I don't have nausea""), call RecordNegativeFinding().
+**Step 2: User denies symptoms**
+- IMMEDIATELY call RecordNegativeFinding() for each denied symptom
 
-## Assessment
+**Step 3: Create assessment**
+- **CALL CreateAssessment() IMMEDIATELY when user says:**
+  - ""create assessment"", ""regenerate assessment"", ""make assessment"", ""assessment""
+  - ""call createassessment"", ""call createassessment function""
+  - OR when you have enough info for a diagnosis
+- **DO NOT describe assessments in text - CALL THE FUNCTION**
+- **Example call:** CreateAssessment(hypothesis=""acute pharyngitis"", confidence=0.75, recommendedAction=""see-gp"")
+- Required: hypothesis (your diagnosis as a string), confidence (0.0-1.0 decimal, use 0.7 if unsure)
+- Optional: differentials (comma-separated alternatives), reasoning (explanation), recommendedAction (defaults to ""see-gp"")
+- The function will save the assessment - you don't need to describe it, just call it
 
-When you have enough information (episode stage = ""characterized"" for primary symptoms):
-1. Formulate a hypothesis based on:
-   - Active episodes and their details
-   - Negative findings (what's ruled out)
-   - Symptom patterns and combinations
-2. Call CreateAssessment() with your reasoning
-3. Share the assessment with the user in plain language
+**Step 4: Final response**
+- After all function calls are complete, format your final response as JSON with a ""message"" field
 
 ## Phase Awareness
 
@@ -74,9 +66,13 @@ Track conversation phase:
 - ASSESSING: Enough info, forming/sharing assessment
 - RECOMMENDING: Assessment complete, discussing next steps
 
-IMPORTANT: You must respond with valid JSON in this exact format:
+## Response Format
+
+CRITICAL: You MUST format your final response as valid JSON with a REQUIRED ""message"" field. The ""message"" field is MANDATORY and must be a string containing your response to the user.
+
+After you have completed all necessary function calls and gathered all information, format your final response as valid JSON in this EXACT format:
 {
-  ""message"": ""Your response message to the user"",
+  ""message"": ""Your response message to the user - THIS FIELD IS REQUIRED"",
   ""appointment"": {
     ""needed"": true/false,
     ""urgency"": ""Emergency"" | ""High"" | ""Medium"" | ""Low"" | ""None"",
@@ -93,7 +89,11 @@ IMPORTANT: You must respond with valid JSON in this exact format:
   ]
 }
 
-Always call the appropriate functions when users report symptoms or request actions. Always return valid JSON.";
+REQUIREMENTS:
+- The ""message"" field is REQUIRED and must be a string (not an object or array)
+- The ""message"" field must contain your natural language response to the user
+- Do NOT include other fields at the root level (like ""symptoms"" or ""questions"") - only ""message"", ""appointment"", and ""symptomChanges""
+- Focus on calling functions and gathering information first. Format your final response as JSON only after all function calls are complete.";
 
     private readonly VectorStoreService _vectorStoreService;
     private readonly VectorStoreSettings _vectorStoreSettings;
@@ -165,6 +165,12 @@ Always call the appropriate functions when users report symptoms or request acti
                 input.UserId,
                 input.ConversationId);
 
+            // Set connectionId on statusUpdateService if available
+            if (statusUpdateService != null && input.ConnectionId != null)
+            {
+                statusUpdateService.SetConnectionId(input.ConnectionId);
+            }
+
             // Create plugins and set their context
             var symptomTrackerPlugin = _serviceProvider.GetRequiredService<SymptomTrackerPlugin>();
             symptomTrackerPlugin.SetContext(conversationContext, input.UserId);
@@ -172,7 +178,7 @@ Always call the appropriate functions when users report symptoms or request acti
             var assessmentPlugin = _serviceProvider.GetRequiredService<AssessmentPlugin>();
             if (input.ConversationId.HasValue)
             {
-                assessmentPlugin.SetContext(conversationContext, input.UserId, input.ConversationId.Value);
+                assessmentPlugin.SetContext(conversationContext, input.UserId, input.ConversationId.Value, statusUpdateService);
             }
 
             // Create a kernel instance for this request with plugins
@@ -228,20 +234,17 @@ Always call the appropriate functions when users report symptoms or request acti
             chatHistory.AddUserMessage(input.Message);
 
             // Get AI response using request kernel with plugins
-            var responseText = await GetChatCompletionWithKernelAsync(
+            var (responseText, explicitChanges) = await GetChatCompletionWithKernelAsync(
                 requestKernel,
                 chatHistory,
-                input.ConnectionId,
-                statusUpdateService,
-                cancellationToken,
-                statusUpdatesSent,
-                conversationContext);
+                cancellationToken);
 
             // Flush context changes
             await _contextService.FlushContextAsync(conversationContext);
 
             var response = CreateResponse(responseText);
             response.StatusUpdatesSent = statusUpdatesSent;
+            response.ExplicitChanges = explicitChanges;
 
             return response;
         }
@@ -279,255 +282,95 @@ Always call the appropriate functions when users report symptoms or request acti
         return prompt;
     }
 
-    private async Task<string> GetChatCompletionWithKernelAsync(
+    private async Task<(string Response, List<EntityChange> ExplicitChanges)> GetChatCompletionWithKernelAsync(
         Kernel kernel,
         ChatHistory chatHistory,
-        string? connectionId = null,
-        IStatusUpdateService? statusUpdateService = null,
-        CancellationToken cancellationToken = default,
-        List<object>? statusUpdatesSent = null,
-        ConversationContext? conversationContext = null)
+        CancellationToken cancellationToken = default)
     {
-        const int maxTurns = 15;
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
         var executionSettings = new OpenAIPromptExecutionSettings
         {
             ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
         };
 
-        int turnCount = 0;
-        string? finalResponse = null;
-        var initialHistoryCount = chatHistory.Count;
-        int? assessmentIdBeforeTurn = null;
+        // Track explicit changes from tool execution
+        var explicitChanges = new List<EntityChange>();
 
-        while (turnCount < maxTurns)
+        try
         {
-            turnCount++;
-            Logger.LogDebug("Multi-turn agentic loop: Turn {TurnNumber}/{MaxTurns}", turnCount, maxTurns);
+            // Single call - AutoInvoke handles all recursion internally
+            Logger.LogDebug("Calling GetChatMessageContentsAsync with AutoInvokeKernelFunctions");
+            var response = await chatCompletionService.GetChatMessageContentsAsync(
+                chatHistory,
+                executionSettings,
+                kernel,
+                cancellationToken: cancellationToken);
 
-            // Track assessment ID at start of turn to detect new ones
-            if (conversationContext != null)
+            // Extract final response from the last assistant message
+            // AutoInvoke has already handled all tool calls and recursion
+            var assistantMessage = response.FirstOrDefault();
+            
+            if (assistantMessage == null)
             {
-                assessmentIdBeforeTurn = conversationContext.CurrentAssessment?.Id;
+                Logger.LogWarning("No assistant message returned from chat completion");
+                // Fallback: get last assistant message from chat history
+                var lastAssistantMessage = chatHistory
+                    .Where(m => m.Role == AuthorRole.Assistant)
+                    .LastOrDefault();
 
-                // Send "generating assessment" BEFORE calling the AI if we have active episodes
-                // and haven't sent it yet, and user message suggests assessment generation
-                if (connectionId != null && statusUpdateService != null && turnCount == 1)
+                if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
                 {
-                    var hasActiveEpisodes = conversationContext.ActiveEpisodes.Any();
-                    var alreadySentGenerating = statusUpdatesSent?.Any(s =>
-                    {
-                        if (s == null) return false;
-                        try
-                        {
-                            var typeProp = s.GetType().GetProperty("type");
-                            if (typeProp != null)
-                            {
-                                var typeValue = typeProp.GetValue(s)?.ToString();
-                                return typeValue == "assessment-generating";
-                            }
-                        }
-                        catch
-                        {
-                            // Ignore reflection errors
-                        }
+                    Logger.LogDebug("Using last assistant message from chat history as fallback");
+                    return (lastAssistantMessage.Content, explicitChanges);
+                }
 
-                        return false;
-                    }) ?? false;
+                return ("I apologize, but I couldn't generate a response.", explicitChanges);
+            }
 
-                    // Check if user message suggests assessment generation
-                    var userMessage = chatHistory.LastOrDefault(m => m.Role == AuthorRole.User)?.Content ?? "";
-                    var mightGenerateAssessment = hasActiveEpisodes &&
-                                                  (userMessage.Contains("assessment",
-                                                       StringComparison.OrdinalIgnoreCase) ||
-                                                   userMessage.Contains("diagnosis",
-                                                       StringComparison.OrdinalIgnoreCase) ||
-                                                   userMessage.Contains("redo", StringComparison.OrdinalIgnoreCase) ||
-                                                   userMessage.Contains("what do you think",
-                                                       StringComparison.OrdinalIgnoreCase) ||
-                                                   userMessage.Contains("evaluate",
-                                                       StringComparison.OrdinalIgnoreCase));
+            var finalResponse = assistantMessage.Content ?? string.Empty;
 
-                    if (mightGenerateAssessment && !alreadySentGenerating)
-                    {
-                        Logger.LogDebug(
-                            "Sending generating assessment status - before AI call, active episodes and user message suggests assessment");
-                        await statusUpdateService.SendGeneratingAssessmentAsync(connectionId);
-                        statusUpdatesSent?.Add(new
-                        {
-                            type = "assessment-generating",
-                            message = "Generating assessment...",
-                            timestamp = DateTime.UtcNow
-                        });
-                        await Task.Delay(800); // Delay for UI flow
-                    }
+            if (string.IsNullOrWhiteSpace(finalResponse))
+            {
+                Logger.LogWarning("Assistant message has no content, checking chat history");
+                // Fallback: get last assistant message from chat history
+                var lastAssistantMessage = chatHistory
+                    .Where(m => m.Role == AuthorRole.Assistant)
+                    .LastOrDefault();
+
+                if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
+                {
+                    finalResponse = lastAssistantMessage.Content;
+                }
+                else
+                {
+                    finalResponse = "I apologize, but I couldn't generate a response.";
                 }
             }
 
-            try
-            {
-                var response = await chatCompletionService.GetChatMessageContentsAsync(
-                    chatHistory,
-                    executionSettings,
-                    kernel,
-                    cancellationToken: cancellationToken);
+            // Post-process: Ensure response is valid JSON format
+            // If the response is not valid JSON, try to format it
+            finalResponse = await EnsureJsonFormatAsync(
+                finalResponse,
+                chatCompletionService,
+                chatHistory,
+                kernel,
+                cancellationToken);
 
-                var assistantMessage = response.FirstOrDefault();
+            // Validate that response has required "message" field
+            finalResponse = await ValidateAndFixMessageFieldAsync(
+                finalResponse,
+                chatCompletionService,
+                kernel,
+                cancellationToken);
 
-                if (assistantMessage == null)
-                {
-                    Logger.LogWarning("No assistant message returned on turn {TurnNumber}", turnCount);
-                    break;
-                }
-
-                // Check if response has content (final response)
-                // With AutoInvokeKernelFunctions, function calls are handled internally and the model
-                // is called again until it provides a final response. However, we want explicit control,
-                // so we check if the chat history grew (indicating function calls were made).
-                bool hasContent = !string.IsNullOrWhiteSpace(assistantMessage.Content);
-
-                // Check if chat history grew (indicates function calls were made and results added)
-                var historyGrew = chatHistory.Count > initialHistoryCount + turnCount;
-
-                if (historyGrew)
-                {
-                    Logger.LogDebug(
-                        "Turn {TurnNumber}: Chat history grew (from {Initial} to {Current}), indicating function calls were made",
-                        turnCount, initialHistoryCount + turnCount, chatHistory.Count);
-                }
-
-                // If we have content, this is likely the final response
-                // However, with AutoInvokeKernelFunctions, the model might still want to make more calls
-                // So we check if the history grew - if it did, functions were called and we should continue
-                if (hasContent && !historyGrew)
-                {
-                    // Final response - no function calls were made, we have content
-                    // Send a brief delay to ensure status messages are displayed before final message
-                    if (connectionId != null && statusUpdateService != null && statusUpdatesSent != null &&
-                        statusUpdatesSent.Any())
-                    {
-                        await Task.Delay(1000); // Longer delay to ensure all status messages appear first
-                    }
-
-                    finalResponse = assistantMessage.Content ?? string.Empty;
-                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})",
-                        turnCount, finalResponse.Length);
-                    break;
-                }
-
-                // If history grew, function calls were made and we should continue
-                // Add the assistant message to history and continue
-                if (historyGrew)
-                {
-                    Logger.LogDebug("Turn {TurnNumber}: Functions were invoked (history grew), continuing to next turn",
-                        turnCount);
-
-                    // Handle assessment status updates
-                    if (connectionId != null && statusUpdateService != null && conversationContext != null)
-                    {
-                        // Check if a new assessment was created (ID changed or new one created)
-                        var assessmentIdAfter = conversationContext.CurrentAssessment?.Id;
-                        var newAssessmentCreated = assessmentIdAfter.HasValue &&
-                                                   (assessmentIdBeforeTurn == null || assessmentIdAfter.Value !=
-                                                       assessmentIdBeforeTurn.Value);
-
-                        // Check if a new assessment was created
-                        if (newAssessmentCreated && conversationContext.CurrentAssessment != null)
-                        {
-                            var assessment = conversationContext.CurrentAssessment;
-                            Logger.LogDebug(
-                                "Assessment created detected: Id={Id}, Hypothesis={Hypothesis}, Confidence={Confidence}",
-                                assessment.Id, assessment.Hypothesis, assessment.Confidence);
-
-                            // Send assessment-created status with details
-                            Logger.LogDebug(
-                                "Sending assessment-created status via SignalR: Id={Id}, Hypothesis={Hypothesis}",
-                                assessment.Id, assessment.Hypothesis);
-                            await statusUpdateService.SendAssessmentCreatedAsync(
-                                connectionId,
-                                assessment.Id,
-                                assessment.Hypothesis,
-                                assessment.Confidence);
-                            statusUpdatesSent?.Add(new
-                            {
-                                type = "assessment-created",
-                                assessmentId = assessment.Id,
-                                hypothesis = assessment.Hypothesis,
-                                confidence = assessment.Confidence,
-                                timestamp = DateTime.UtcNow
-                            });
-                            await Task.Delay(800); // Delay for UI flow
-
-                            // Analyzing assessment (BEFORE final response - analyzing the completed assessment)
-                            await statusUpdateService.SendAnalyzingAssessmentAsync(connectionId);
-                            statusUpdatesSent?.Add(new
-                            {
-                                type = "assessment-analyzing",
-                                message = "Analyzing assessment...",
-                                timestamp = DateTime.UtcNow
-                            });
-                            await Task.Delay(800); // Delay before final response
-                        }
-                    }
-
-                    // Add assistant message to history if it has content
-                    // Function results are already added by AutoInvokeKernelFunctions
-                    if (hasContent && !string.IsNullOrWhiteSpace(assistantMessage.Content))
-                    {
-                        chatHistory.AddAssistantMessage(assistantMessage.Content);
-                    }
-
-                    // Update initial count for next iteration
-                    initialHistoryCount = chatHistory.Count;
-                    continue;
-                }
-
-                // If we have content but history didn't grow, this should be final
-                if (hasContent)
-                {
-                    finalResponse = assistantMessage.Content;
-                    Logger.LogDebug("Turn {TurnNumber}: Model provided final response (length: {Length})",
-                        turnCount, finalResponse?.Length ?? 0);
-                    break;
-                }
-
-                // If we have neither content nor history growth, something unexpected happened
-                Logger.LogWarning("Turn {TurnNumber}: Unexpected response - no content and no history growth",
-                    turnCount);
-                finalResponse = assistantMessage.Content ?? "I apologize, but I couldn't generate a response.";
-                break;
-            }
-            catch (Exception ex)
-            {
-                Logger.LogError(ex, "Error on turn {TurnNumber} of multi-turn loop", turnCount);
-                throw;
-            }
+            Logger.LogDebug("Final response generated (length: {Length})", finalResponse.Length);
+            return (finalResponse, explicitChanges);
         }
-
-        if (turnCount >= maxTurns)
+        catch (Exception ex)
         {
-            Logger.LogWarning("Multi-turn loop reached maximum turns ({MaxTurns}). Using last response.", maxTurns);
-            // Get the last assistant message from history as fallback
-            var lastAssistantMessage = chatHistory
-                .Where(m => m.Role == AuthorRole.Assistant)
-                .LastOrDefault();
-
-            if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
-            {
-                finalResponse = lastAssistantMessage.Content;
-            }
+            Logger.LogError(ex, "Error in GetChatCompletionWithKernelAsync");
+            throw;
         }
-
-        if (string.IsNullOrWhiteSpace(finalResponse))
-        {
-            Logger.LogWarning("Multi-turn loop completed but no final response generated");
-            finalResponse = "I apologize, but I couldn't generate a response.";
-        }
-
-        Logger.LogDebug("Multi-turn loop completed in {TurnCount} turns. Final response length: {Length}",
-            turnCount, finalResponse.Length);
-
-        return finalResponse;
     }
 
 
@@ -610,6 +453,244 @@ Always call the appropriate functions when users report symptoms or request acti
         }
 
         return contextMessages;
+    }
+
+    private async Task<string> EnsureJsonFormatAsync(
+        string response,
+        IChatCompletionService chatCompletionService,
+        ChatHistory chatHistory,
+        Kernel kernel,
+        CancellationToken cancellationToken)
+    {
+        // Check if response is already valid JSON
+        if (IsValidJson(response))
+        {
+            Logger.LogDebug("Response is already valid JSON, no formatting needed");
+            return response;
+        }
+
+        // Try to extract JSON from response (might be wrapped in markdown)
+        var extractedJson = ExtractJsonFromResponse(response);
+        if (IsValidJson(extractedJson))
+        {
+            Logger.LogDebug("Extracted valid JSON from response");
+            return extractedJson;
+        }
+
+        // If not valid JSON, ask AI to format it
+        Logger.LogDebug("Response is not valid JSON, requesting formatting");
+        try
+        {
+            var formattingHistory = new ChatHistory();
+            var schemaPrompt = @"You are a JSON formatter. Format the following response as valid JSON according to this EXACT schema:
+
+{
+  ""message"": ""string (REQUIRED - your response to the user)"",
+  ""appointment"": {
+    ""needed"": boolean,
+    ""urgency"": ""Emergency"" | ""High"" | ""Medium"" | ""Low"" | ""None"",
+    ""symptoms"": [""string""],
+    ""duration"": number,
+    ""readyToBook"": boolean,
+    ""followUpNeeded"": boolean,
+    ""nextQuestions"": [""string""],
+    ""preferredTime"": null,
+    ""emergencyAction"": ""string""
+  },
+  ""symptomChanges"": [
+    {""symptom"": ""string"", ""action"": ""string""}
+  ]
+}
+
+CRITICAL: The ""message"" field is REQUIRED and must be a string. If the response contains symptoms or questions but no message field, create an appropriate message string that includes that information.";
+            formattingHistory.AddSystemMessage(schemaPrompt);
+            formattingHistory.AddUserMessage($"Format this response as valid JSON with a REQUIRED 'message' field:\n\n{response}");
+
+            // Create formatting settings without tool calling
+            // Use default behavior (no tools) for formatting pass
+            var formattingSettings = new OpenAIPromptExecutionSettings();
+
+            var formattedResponse = await chatCompletionService.GetChatMessageContentsAsync(
+                formattingHistory,
+                formattingSettings,
+                kernel,
+                cancellationToken: cancellationToken);
+
+            var formattedMessage = formattedResponse.FirstOrDefault()?.Content ?? response;
+            
+            // Try to extract JSON from formatted response
+            var formattedJson = ExtractJsonFromResponse(formattedMessage);
+            if (IsValidJson(formattedJson))
+            {
+                Logger.LogDebug("Successfully formatted response as JSON");
+                return formattedJson;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error formatting response as JSON, returning original");
+        }
+
+        // Fallback: return original response
+        Logger.LogWarning("Could not format response as JSON, returning original");
+        return response;
+    }
+
+    private async Task<string> ValidateAndFixMessageFieldAsync(
+        string response,
+        IChatCompletionService chatCompletionService,
+        Kernel kernel,
+        CancellationToken cancellationToken)
+    {
+        // Check if response is valid JSON and has "message" field
+        try
+        {
+            var jsonText = ExtractJsonFromResponse(response);
+            if (!IsValidJson(jsonText))
+            {
+                return response; // Not valid JSON, return as-is (will be handled by parser)
+            }
+
+            using var doc = JsonDocument.Parse(jsonText);
+            var root = doc.RootElement;
+
+            // Check for message field (case-insensitive)
+            bool hasMessageField = false;
+            foreach (var prop in root.EnumerateObject())
+            {
+                if (string.Equals(prop.Name, "message", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Check if it's a string (not object/array)
+                    if (prop.Value.ValueKind == JsonValueKind.String)
+                    {
+                        var messageValue = prop.Value.GetString();
+                        if (!string.IsNullOrWhiteSpace(messageValue))
+                        {
+                            hasMessageField = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (hasMessageField)
+            {
+                Logger.LogDebug("Response has valid message field");
+                return response;
+            }
+
+            // Missing message field - request reformatting with stronger prompt
+            Logger.LogWarning("Response is missing required 'message' field, requesting reformatting");
+            var validationHistory = new ChatHistory();
+            var validationPrompt = @"You are a JSON formatter. The following JSON response is missing the REQUIRED ""message"" field. 
+
+You MUST add a ""message"" field that is a STRING (not an object or array) containing a natural language response to the user.
+
+If the JSON contains symptoms, questions, or other data, convert that information into a readable message string in the ""message"" field.
+
+The response MUST have this structure:
+{
+  ""message"": ""string (REQUIRED - your response to the user)"",
+  ...other fields...
+}
+
+Return ONLY the corrected JSON, nothing else.";
+            validationHistory.AddSystemMessage(validationPrompt);
+            validationHistory.AddUserMessage($"Add the required 'message' field to this JSON:\n\n{response}");
+
+            var validationSettings = new OpenAIPromptExecutionSettings();
+            var validatedResponse = await chatCompletionService.GetChatMessageContentsAsync(
+                validationHistory,
+                validationSettings,
+                kernel,
+                cancellationToken: cancellationToken);
+
+            var validatedMessage = validatedResponse.FirstOrDefault()?.Content ?? response;
+            var validatedJson = ExtractJsonFromResponse(validatedMessage);
+            
+            if (IsValidJson(validatedJson))
+            {
+                // Verify it now has message field
+                using var validatedDoc = JsonDocument.Parse(validatedJson);
+                var validatedRoot = validatedDoc.RootElement;
+                foreach (var prop in validatedRoot.EnumerateObject())
+                {
+                    if (string.Equals(prop.Name, "message", StringComparison.OrdinalIgnoreCase) &&
+                        prop.Value.ValueKind == JsonValueKind.String &&
+                        !string.IsNullOrWhiteSpace(prop.Value.GetString()))
+                    {
+                        Logger.LogDebug("Successfully added message field to response");
+                        return validatedJson;
+                    }
+                }
+            }
+
+            Logger.LogWarning("Could not add message field, returning original response");
+            return response;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error validating message field, returning original response");
+            return response;
+        }
+    }
+
+    private static bool IsValidJson(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(text);
+            return doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ExtractJsonFromResponse(string response)
+    {
+        // Remove markdown code blocks if present
+        var json = response.Trim();
+        if (json.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
+        {
+            json = json.Substring(7);
+        }
+
+        if (json.StartsWith("```", StringComparison.OrdinalIgnoreCase))
+        {
+            json = json.Substring(3);
+        }
+
+        if (json.EndsWith("```", StringComparison.OrdinalIgnoreCase))
+        {
+            json = json.Substring(0, json.Length - 3);
+        }
+
+        json = json.Trim();
+
+        // Try to find JSON object boundaries if JSON is mixed with text
+        var firstBrace = json.IndexOf('{');
+        var lastBrace = json.LastIndexOf('}');
+
+        if (firstBrace >= 0 && lastBrace > firstBrace)
+        {
+            var jsonObject = json.Substring(firstBrace, lastBrace - firstBrace + 1);
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(jsonObject);
+                return jsonObject;
+            }
+            catch
+            {
+                // If extraction fails, return original
+            }
+        }
+
+        return json;
     }
 
     protected override HealthChatScenarioResponse CreateResponse(string responseText)

@@ -9,16 +9,20 @@ namespace WebApi.Services.Chat;
 /// </summary>
 public interface IStatusUpdateService
 {
-    Task SendStatusUpdateAsync(string connectionId, object statusData);
-    Task SendGeneratingAssessmentAsync(string connectionId);
-    Task SendAnalyzingAssessmentAsync(string connectionId);
-    Task SendAssessmentCreatedAsync(string connectionId, int assessmentId, string hypothesis, decimal confidence);
+    string? ConnectionId { get; }
+    void SetConnectionId(string connectionId);
+    Task SendStatusUpdateAsync(object statusData);
+    Task SendGeneratingAssessmentAsync();
+    Task SendAnalyzingAssessmentAsync();
+    Task SendAssessmentCreatedAsync(int assessmentId, string hypothesis, decimal confidence);
 }
 
 public class StatusUpdateService : IStatusUpdateService
 {
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly ILogger<StatusUpdateService> _logger;
+
+    public string? ConnectionId { get; private set; }
 
     public StatusUpdateService(
         IHubContext<ChatHub> hubContext,
@@ -28,21 +32,33 @@ public class StatusUpdateService : IStatusUpdateService
         _logger = logger;
     }
 
-    public async Task SendStatusUpdateAsync(string connectionId, object statusData)
+    public void SetConnectionId(string connectionId)
     {
+        ConnectionId = connectionId;
+    }
+
+    public async Task SendStatusUpdateAsync(object statusData)
+    {
+        if (ConnectionId == null)
+        {
+            _logger.LogWarning("[STATUS UPDATE SERVICE] Cannot send status update - ConnectionId is not set");
+            return;
+        }
+
         try
         {
             var json = JsonSerializer.Serialize(statusData);
-            await _hubContext.Clients.Client(connectionId).SendAsync("StatusUpdate", json);
-            _logger.LogDebug("Sent status update to connection {ConnectionId}", connectionId);
+            _logger.LogInformation("[STATUS UPDATE SERVICE] Sending status update to connection {ConnectionId}, JSON: {Json}", ConnectionId, json);
+            await _hubContext.Clients.Client(ConnectionId).SendAsync("StatusUpdate", json);
+            _logger.LogInformation("[STATUS UPDATE SERVICE] Successfully sent status update to connection {ConnectionId}", ConnectionId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to send status update to connection {ConnectionId}", connectionId);
+            _logger.LogError(ex, "[STATUS UPDATE SERVICE] Failed to send status update to connection {ConnectionId}", ConnectionId);
         }
     }
 
-    public async Task SendGeneratingAssessmentAsync(string connectionId)
+    public async Task SendGeneratingAssessmentAsync()
     {
         var status = new
         {
@@ -50,22 +66,24 @@ public class StatusUpdateService : IStatusUpdateService
             message = "Generating assessment...",
             timestamp = DateTime.UtcNow
         };
-        await SendStatusUpdateAsync(connectionId, status);
+        await SendStatusUpdateAsync(status);
     }
 
-    public async Task SendAnalyzingAssessmentAsync(string connectionId)
+    public async Task SendAnalyzingAssessmentAsync()
     {
+        _logger.LogInformation("[STATUS UPDATE SERVICE] SendAnalyzingAssessmentAsync called for connection {ConnectionId}", ConnectionId);
         var status = new
         {
             type = "assessment-analyzing",
             message = "Analyzing assessment...",
             timestamp = DateTime.UtcNow
         };
-        await SendStatusUpdateAsync(connectionId, status);
+        await SendStatusUpdateAsync(status);
     }
 
-    public async Task SendAssessmentCreatedAsync(string connectionId, int assessmentId, string hypothesis, decimal confidence)
+    public async Task SendAssessmentCreatedAsync(int assessmentId, string hypothesis, decimal confidence)
     {
+        _logger.LogInformation("[STATUS UPDATE SERVICE] SendAssessmentCreatedAsync called for connection {ConnectionId}, AssessmentId={AssessmentId}", ConnectionId, assessmentId);
         var status = new
         {
             type = "assessment-created",
@@ -74,6 +92,6 @@ public class StatusUpdateService : IStatusUpdateService
             confidence = confidence,
             timestamp = DateTime.UtcNow
         };
-        await SendStatusUpdateAsync(connectionId, status);
+        await SendStatusUpdateAsync(status);
     }
 }

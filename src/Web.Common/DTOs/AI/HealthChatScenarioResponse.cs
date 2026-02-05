@@ -1,3 +1,5 @@
+using Web.Common.DTOs.Health;
+
 namespace Web.Common.DTOs.AI;
 
 /// <summary>
@@ -16,4 +18,10 @@ public class HealthChatScenarioResponse
     /// Status updates sent during processing (for persistence).
     /// </summary>
     public List<object> StatusUpdatesSent { get; set; } = new();
+
+    /// <summary>
+    /// Explicitly tracked entity changes from tool execution.
+    /// These are more reliable than post-hoc database queries.
+    /// </summary>
+    public List<EntityChange> ExplicitChanges { get; set; } = new();
 }

@@ -32,7 +32,7 @@ public class SymptomTrackerPlugin(
     }
 
     [KernelFunction]
-    [Description("CreateSymptomWithEpisode: Creates a new symptom type and an associated episode when a user mentions a symptom. Returns the created episode ID.")]
+    [Description("CreateSymptomWithEpisode: YOU MUST CALL THIS FUNCTION immediately when a user reports ANY symptom. This function saves the symptom to the database. DO NOT just acknowledge symptoms in text - you MUST call this function to track them. Parameters: name (required - the symptom name like 'headache', 'fever', 'cough'), description (optional additional details). Returns the created episode ID which you can use with UpdateEpisode.")]
     public async Task<string> CreateSymptomWithEpisodeAsync(
         [Description("The name of the symptom")] string name,
         [Description("Optional description of the symptom")] string? description = null)
@@ -46,7 +46,7 @@ public class SymptomTrackerPlugin(
         {
             // Get or create symptom type
             var symptom = await symptomRepository.GetOrCreateSymptomAsync(_userId, name, description);
-            
+
             // Check if there's a recent episode for this symptom
             if (_context.RecentEpisodesBySymptom.TryGetValue(name, out var recentEpisode))
             {
@@ -78,7 +78,7 @@ public class SymptomTrackerPlugin(
     }
 
     [KernelFunction]
-    [Description("UpdateEpisode: Updates an episode with additional details like severity, location, frequency, triggers, relievers, or pattern. Automatically advances the episode stage based on how many fields are filled.")]
+    [Description("UpdateEpisode: YOU MUST CALL THIS FUNCTION to add details to an episode (severity, location, frequency, triggers, relievers, pattern). Call this every time you learn new information about a symptom episode. Parameters: episodeId (required), then any details you learned (severity 1-10, location, frequency constant/intermittent/occasional, triggers comma-separated, relievers comma-separated, pattern description).")]
     public async Task<string> UpdateEpisodeAsync(
         [Description("The ID of the episode to update")] int episodeId,
         [Description("Severity on a scale of 1-10")] int? severity = null,
@@ -208,7 +208,7 @@ public class SymptomTrackerPlugin(
     }
 
     [KernelFunction]
-    [Description("RecordNegativeFinding: Records a negative finding when a user explicitly denies having a symptom (e.g., 'no fever', 'I don't have nausea').")]
+    [Description("RecordNegativeFinding: YOU MUST CALL THIS FUNCTION when a user explicitly denies having a symptom (e.g., 'no fever', 'I don't have nausea'). This helps rule out conditions. Parameters: symptomName (required - the symptom they don't have), episodeId (optional - link to a related episode).")]
     public async Task<string> RecordNegativeFindingAsync(
         [Description("The name of the symptom the user does not have")] string symptomName,
         [Description("Optional episode ID if this relates to a specific episode")] int? episodeId = null)
@@ -239,7 +239,7 @@ public class SymptomTrackerPlugin(
     }
 
     [KernelFunction]
-    [Description("GetActiveEpisodes: Returns a list of active episodes from the conversation context.")]
+    [Description("GetActiveEpisodes: CALL THIS FUNCTION to check what symptoms/episodes the user currently has active. Use this before creating new episodes to avoid duplicates. Returns a list of active episode IDs and their stages.")]
     public string GetActiveEpisodes()
     {
         if (_context == null)
@@ -261,7 +261,7 @@ public class SymptomTrackerPlugin(
     }
 
     [KernelFunction]
-    [Description("GetSymptomHistory: Returns the history of episodes for a specific symptom type.")]
+    [Description("GetSymptomHistory: CALL THIS FUNCTION to get past episodes for a specific symptom. Use this to understand symptom patterns over time. Parameters: symptomName (required - the symptom to get history for).")]
     public async Task<string> GetSymptomHistoryAsync(
         [Description("The name of the symptom to get history for")] string symptomName)
     {
@@ -273,7 +273,7 @@ public class SymptomTrackerPlugin(
         try
         {
             var episodes = await episodeRepository.GetEpisodesBySymptomAsync(_userId, symptomName);
-            
+
             if (!episodes.Any())
             {
                 return $"No history found for {symptomName}.";

@@ -135,7 +135,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     .ThenBy(m => m.Id)
                     .Select(m => new ChatMessage
                     {
-                        Content = m.Content,
+                        Content = ExtractMessageFromJson(m.Content),
                         IsUser = m.Role.ToLowerInvariant() == "user",
                         Timestamp = m.CreatedAt,
                         StatusInformation = DeserializeStatusInformation(m.StatusInformationJson)
@@ -189,7 +189,22 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 {
                     processedAny = true;
                     processedCount++;
+                    var statusType = status.GetType().Name;
+                    var statusInfo = status switch
+                    {
+                        AssessmentGeneratingStatus gen => $"Generating: {gen.Message}",
+                        AssessmentAnalyzingStatus anal => $"Analyzing: {anal.Message}",
+                        AssessmentCreatedStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
+                        GeneralStatus gen => $"General: {gen.Message}",
+                        _ => status.ToString() ?? "Unknown"
+                    };
+                    await JS.InvokeVoidAsync("console.log", $"[RENDER LOOP] Dequeued status: Type={statusType}, Info={statusInfo}, QueueSize: {_statusUpdateQueue.Count}");
                     await ProcessStatusUpdateAsync(status);
+                }
+                
+                if (processedCount > 0)
+                {
+                    await JS.InvokeVoidAsync("console.log", $"[RENDER LOOP] Processed {processedCount} status updates, QueueSize: {_statusUpdateQueue.Count}");
                 }
                 
                 // If we processed any updates, trigger a render
@@ -233,26 +248,124 @@ public partial class Chat : ComponentBase, IAsyncDisposable
     
     private async Task ProcessStatusUpdateAsync(StatusInformation status)
     {
+        var statusType = status.GetType().Name;
+        var statusInfo = status switch
+        {
+            AssessmentGeneratingStatus gen => $"Generating: {gen.Message}",
+            AssessmentAnalyzingStatus anal => $"Analyzing: {anal.Message}",
+            AssessmentCreatedStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
+            GeneralStatus gen => $"General: {gen.Message}",
+            _ => status.ToString() ?? "Unknown"
+        };
+        
+        await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] Processing: Type={statusType}, Info={statusInfo}, HasProcessingMessage={_currentProcessingMessage != null}, CurrentStatusCount={_currentStatusUpdates.Count}");
+        
         if (_currentProcessingMessage != null)
         {
-            _currentStatusUpdates.Add(status);
+            // Check for duplicates before adding
+            bool isDuplicate = false;
             
-            // Sort status updates by type order to maintain correct display order
-            var sortedStatuses = _currentStatusUpdates
-                .OrderBy(s => GetStatusSortOrder(s))
-                .ThenBy(s => s.Timestamp)
-                .ToList();
+            if (status is AssessmentGeneratingStatus)
+            {
+                isDuplicate = _currentStatusUpdates.OfType<AssessmentGeneratingStatus>().Any();
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] AssessmentGeneratingStatus duplicate check: {isDuplicate}");
+            }
+            else if (status is AssessmentAnalyzingStatus)
+            {
+                isDuplicate = _currentStatusUpdates.OfType<AssessmentAnalyzingStatus>().Any();
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] AssessmentAnalyzingStatus duplicate check: {isDuplicate}");
+            }
+            else if (status is AssessmentCreatedStatus created)
+            {
+                isDuplicate = _currentStatusUpdates.OfType<AssessmentCreatedStatus>()
+                    .Any(s => s.AssessmentId == created.AssessmentId);
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] AssessmentCreatedStatus duplicate check: {isDuplicate} (ID={created.AssessmentId})");
+            }
+            else if (status is GeneralStatus general)
+            {
+                // Check for duplicate general statuses with the same message
+                isDuplicate = _currentStatusUpdates.OfType<GeneralStatus>()
+                    .Any(s => s.Message == general.Message);
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] GeneralStatus duplicate check: {isDuplicate} (Message={general.Message})");
+            }
+            
+            if (!isDuplicate)
+            {
+                _currentStatusUpdates.Add(status);
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] Added to _currentStatusUpdates. New count: {_currentStatusUpdates.Count}");
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] DUPLICATE DETECTED - Not adding. Current count: {_currentStatusUpdates.Count}");
+            }
+            
+            // Deduplicate and sort status updates by type order
+            var deduplicatedStatuses = new List<StatusInformation>();
+            var seenGenerating = false;
+            var seenAnalyzing = false;
+            var seenCreatedIds = new HashSet<int>();
+            var seenGeneralMessages = new HashSet<string>();
+            
+            foreach (var s in _currentStatusUpdates.OrderBy(s => GetStatusSortOrder(s)).ThenBy(s => s.Timestamp))
+            {
+                if (s is AssessmentGeneratingStatus)
+                {
+                    if (!seenGenerating)
+                    {
+                        deduplicatedStatuses.Add(s);
+                        seenGenerating = true;
+                    }
+                }
+                else if (s is AssessmentAnalyzingStatus)
+                {
+                    if (!seenAnalyzing)
+                    {
+                        deduplicatedStatuses.Add(s);
+                        seenAnalyzing = true;
+                    }
+                }
+                else if (s is AssessmentCreatedStatus created)
+                {
+                    if (!seenCreatedIds.Contains(created.AssessmentId))
+                    {
+                        deduplicatedStatuses.Add(s);
+                        seenCreatedIds.Add(created.AssessmentId);
+                    }
+                }
+                else if (s is GeneralStatus general)
+                {
+                    // Deduplicate general statuses with the same message
+                    var messageKey = general.Message ?? string.Empty;
+                    if (!seenGeneralMessages.Contains(messageKey))
+                    {
+                        deduplicatedStatuses.Add(s);
+                        seenGeneralMessages.Add(messageKey);
+                    }
+                }
+                else
+                {
+                    deduplicatedStatuses.Add(s);
+                }
+            }
             
             // Always create new list instance to ensure Blazor detects change
-            _currentProcessingMessage.StatusInformation = new List<StatusInformation>(sortedStatuses);
+            _currentProcessingMessage.StatusInformation = deduplicatedStatuses;
+            
+            var statusTypes = string.Join(", ", deduplicatedStatuses.Select(s => s.GetType().Name));
+            await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] After deduplication: Count={deduplicatedStatuses.Count}, Types=[{statusTypes}]");
             
             // Only add the message to UI if it hasn't been added yet and we have status updates
             // This prevents showing empty bubbles
-            if (_currentProcessingMessage.Content == null && _currentStatusUpdates.Any())
+            if (_currentProcessingMessage.Content == null && deduplicatedStatuses.Any())
             {
                 _currentProcessingMessage.Content = string.Empty; // Mark as added but keep content empty
                 Messages.Add(_currentProcessingMessage);
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] Added processing message to UI. Total messages: {Messages.Count}");
             }
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] WARNING: No _currentProcessingMessage! Status will be lost.");
         }
     }
 
@@ -314,12 +427,30 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             // Add entity-based statuses, avoiding duplicates
             foreach (var entityStatus in entityStatuses)
             {
-                // Avoid duplicates - if we already have an assessment-created status, don't add another
+                // Avoid duplicates for assessment statuses - each type should only appear once
                 if (entityStatus is AssessmentCreatedStatus createdStatus)
                 {
                     var existingCreated = allStatuses.OfType<AssessmentCreatedStatus>()
                         .FirstOrDefault(s => s.AssessmentId == createdStatus.AssessmentId);
                     if (existingCreated == null)
+                    {
+                        allStatuses.Add(entityStatus);
+                    }
+                }
+                else if (entityStatus is AssessmentGeneratingStatus)
+                {
+                    // Only one generating status per message
+                    var existingGenerating = allStatuses.OfType<AssessmentGeneratingStatus>().FirstOrDefault();
+                    if (existingGenerating == null)
+                    {
+                        allStatuses.Add(entityStatus);
+                    }
+                }
+                else if (entityStatus is AssessmentAnalyzingStatus)
+                {
+                    // Only one analyzing status per message
+                    var existingAnalyzing = allStatuses.OfType<AssessmentAnalyzingStatus>().FirstOrDefault();
+                    if (existingAnalyzing == null)
                     {
                         allStatuses.Add(entityStatus);
                     }
@@ -330,9 +461,57 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 }
             }
             
-            // Sort status messages by timestamp to maintain correct order
-            // Order should be: assessment-generating -> assessment-created -> assessment-analyzing -> others
-            allStatuses = allStatuses.OrderBy(s => GetStatusSortOrder(s)).ThenBy(s => s.Timestamp).ToList();
+            // Deduplicate by type - ensure each assessment status type appears only once
+            // Also deduplicate general statuses with the same message
+            var deduplicatedStatuses = new List<StatusInformation>();
+            var seenGenerating = false;
+            var seenAnalyzing = false;
+            var seenCreatedIds = new HashSet<int>();
+            var seenGeneralMessages = new HashSet<string>();
+            
+            foreach (var status in allStatuses.OrderBy(s => GetStatusSortOrder(s)).ThenBy(s => s.Timestamp))
+            {
+                if (status is AssessmentGeneratingStatus)
+                {
+                    if (!seenGenerating)
+                    {
+                        deduplicatedStatuses.Add(status);
+                        seenGenerating = true;
+                    }
+                }
+                else if (status is AssessmentAnalyzingStatus)
+                {
+                    if (!seenAnalyzing)
+                    {
+                        deduplicatedStatuses.Add(status);
+                        seenAnalyzing = true;
+                    }
+                }
+                else if (status is AssessmentCreatedStatus created)
+                {
+                    if (!seenCreatedIds.Contains(created.AssessmentId))
+                    {
+                        deduplicatedStatuses.Add(status);
+                        seenCreatedIds.Add(created.AssessmentId);
+                    }
+                }
+                else if (status is GeneralStatus general)
+                {
+                    // Deduplicate general statuses with the same message
+                    var messageKey = general.Message ?? string.Empty;
+                    if (!seenGeneralMessages.Contains(messageKey))
+                    {
+                        deduplicatedStatuses.Add(status);
+                        seenGeneralMessages.Add(messageKey);
+                    }
+                }
+                else
+                {
+                    deduplicatedStatuses.Add(status);
+                }
+            }
+            
+            allStatuses = deduplicatedStatuses;
 
             // Remove processing message if it was added
             if (_currentProcessingMessage != null && Messages.Contains(_currentProcessingMessage))
@@ -340,10 +519,13 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 Messages.Remove(_currentProcessingMessage);
             }
 
+            // Extract message from JSON if content is JSON
+            var messageContent = ExtractMessageFromJson(response.Message);
+            
             // Create final AI message with all statuses
             var aiMessage = new ChatMessage
             {
-                Content = response.Message,
+                Content = messageContent,
                 IsUser = false,
                 Timestamp = DateTime.Now,
                 StatusInformation = new List<StatusInformation>(allStatuses) // New list instance
@@ -383,7 +565,18 @@ public partial class Chat : ComponentBase, IAsyncDisposable
     private async Task OnStatusUpdateReceived(StatusInformation status)
     {
         // SignalR handler - only enqueues, never triggers render directly
+        var statusType = status.GetType().Name;
+        var statusInfo = status switch
+        {
+            AssessmentGeneratingStatus gen => $"Generating: {gen.Message}",
+            AssessmentAnalyzingStatus anal => $"Analyzing: {anal.Message}",
+            AssessmentCreatedStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
+            GeneralStatus gen => $"General: {gen.Message}",
+            _ => status.ToString() ?? "Unknown"
+        };
+        await JS.InvokeVoidAsync("console.log", $"[STATUS ENQUEUE] Type: {statusType}, Info: {statusInfo}, QueueSize: {_statusUpdateQueue.Count}");
         _statusUpdateQueue.Enqueue(status);
+        await JS.InvokeVoidAsync("console.log", $"[STATUS ENQUEUE] After enqueue, QueueSize: {_statusUpdateQueue.Count}");
     }
 
     protected void OnInputTextChanged(string value)
@@ -517,6 +710,131 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         }
 
         return statusList;
+    }
+
+    private static string ExtractMessageFromJson(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return content;
+        }
+
+        // Check if content looks like JSON
+        var trimmed = content.Trim();
+        if (!trimmed.StartsWith("{") || (!trimmed.Contains("\"message\"") && !trimmed.Contains("\"response\"")))
+        {
+            return content; // Not JSON, return as-is
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            var root = doc.RootElement;
+
+            // Try "message" field first (most common)
+            if (root.TryGetProperty("message", out var messageElement))
+            {
+                // Handle both string and object types
+                if (messageElement.ValueKind == JsonValueKind.String)
+                {
+                    var message = messageElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(message))
+                    {
+                        return message;
+                    }
+                }
+                else if (messageElement.ValueKind == JsonValueKind.Object)
+                {
+                    // If message is an object (like assessment JSON), serialize it back to JSON
+                    return messageElement.GetRawText();
+                }
+            }
+
+            // Try "response" field (alternative)
+            if (root.TryGetProperty("response", out var responseElement))
+            {
+                // Handle both string and object types
+                if (responseElement.ValueKind == JsonValueKind.String)
+                {
+                    var response = responseElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(response))
+                    {
+                        return response;
+                    }
+                }
+                else if (responseElement.ValueKind == JsonValueKind.Object)
+                {
+                    // If response is an object, serialize it back to JSON
+                    return responseElement.GetRawText();
+                }
+            }
+
+            // If JSON but no message/response field, try to generate a readable message from the JSON structure
+            var messageParts = new List<string>();
+
+            // Extract symptoms if present
+            if (root.TryGetProperty("symptoms", out var symptomsElement) && symptomsElement.ValueKind == JsonValueKind.Array)
+            {
+                var symptomList = new List<string>();
+                foreach (var symptom in symptomsElement.EnumerateArray())
+                {
+                    if (symptom.ValueKind == JsonValueKind.Object)
+                    {
+                        if (symptom.TryGetProperty("name", out var nameElement))
+                        {
+                            symptomList.Add(nameElement.GetString() ?? "symptom");
+                        }
+                    }
+                    else if (symptom.ValueKind == JsonValueKind.String)
+                    {
+                        symptomList.Add(symptom.GetString() ?? "symptom");
+                    }
+                }
+                if (symptomList.Any())
+                {
+                    messageParts.Add($"I've noted your symptoms: {string.Join(", ", symptomList)}.");
+                }
+            }
+
+            // Extract questions if present
+            if (root.TryGetProperty("questions", out var questionsElement) && questionsElement.ValueKind == JsonValueKind.Array)
+            {
+                var questionList = new List<string>();
+                foreach (var question in questionsElement.EnumerateArray())
+                {
+                    if (question.ValueKind == JsonValueKind.String)
+                    {
+                        questionList.Add(question.GetString() ?? "");
+                    }
+                }
+                if (questionList.Any())
+                {
+                    messageParts.Add(string.Join(" ", questionList));
+                }
+            }
+
+            // If we generated any message parts, use them; otherwise return formatted JSON
+            if (messageParts.Any())
+            {
+                return string.Join("\n\n", messageParts);
+            }
+
+            // Last resort: return formatted JSON (pretty-printed)
+            try
+            {
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                return JsonSerializer.Serialize(root, options);
+            }
+            catch
+            {
+                return content;
+            }
+        }
+        catch (JsonException)
+        {
+            // Not valid JSON, return as-is
+            return content;
+        }
     }
 
     private static List<StatusInformation> DeserializeStatusInformation(string? statusInformationJson)
