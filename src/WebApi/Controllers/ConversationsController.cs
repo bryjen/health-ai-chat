@@ -4,6 +4,7 @@ using Web.Common.DTOs.Conversations;
 using WebApi.Controllers.Utils;
 using WebApi.Exceptions;
 using WebApi.Services.Chat;
+using WebApi.Services.Chat.Conversations;
 
 namespace WebApi.Controllers;
 

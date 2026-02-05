@@ -1,13 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using Microsoft.EntityFrameworkCore;
-using WebApi.Data;
 using Web.Common.DTOs.Conversations;
+using WebApi.Data;
 using WebApi.Exceptions;
 using WebApi.Models;
 
-namespace WebApi.Services.Chat;
+namespace WebApi.Services.Chat.Conversations;
 
 public class ConversationService(AppDbContext context)
 {
@@ -38,8 +35,8 @@ public class ConversationService(AppDbContext context)
             {
                 Id = conversation.Id,
                 Title = conversation.Title,
-                LastMessagePreview = lastMessage?.Content?.Length > 100 
-                    ? lastMessage.Content.Substring(0, 100) + "..." 
+                LastMessagePreview = lastMessage?.Content?.Length > 100
+                    ? lastMessage.Content.Substring(0, 100) + "..."
                     : lastMessage?.Content,
                 UpdatedAt = conversation.UpdatedAt
             });

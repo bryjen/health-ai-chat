@@ -23,7 +23,7 @@ public class StatusInformationSerializer(ILogger<StatusInformationSerializer> lo
 
         var statusList = new List<object>();
 
-        // Add symptom changes
+        // Add symptom changes (but check if we have real-time updates first)
         foreach (var change in symptomChanges)
         {
             switch (change.Action.ToLowerInvariant())
@@ -31,14 +31,24 @@ public class StatusInformationSerializer(ILogger<StatusInformationSerializer> lo
                 case "created":
                     if (int.TryParse(change.Id, out var episodeId))
                     {
-                        statusList.Add(new
+                        // Check if we already have this from real-time updates
+                        var alreadyExists = realTimeStatusUpdates?.Any(s =>
                         {
-                            type = "symptom-added",
-                            symptomName = change.Name ?? "Unknown symptom",
-                            episodeId = episodeId,
-                            location = (string?)null,
-                            timestamp = DateTime.UtcNow
-                        });
+                            var json = JsonSerializer.Serialize(s);
+                            return json.Contains($"\"episodeId\":{episodeId}") && json.Contains("\"type\":\"symptom-added\"");
+                        }) == true;
+
+                        if (!alreadyExists)
+                        {
+                            statusList.Add(new
+                            {
+                                type = "symptom-added",
+                                symptomName = change.Name ?? "Unknown symptom",
+                                episodeId = episodeId,
+                                location = (string?)null,
+                                timestamp = DateTime.UtcNow
+                            });
+                        }
                     }
 
                     break;
@@ -154,6 +164,36 @@ public class StatusInformationSerializer(ILogger<StatusInformationSerializer> lo
                         else
                         {
                             // Add even without ID if it's from real-time
+                            statusList.Add(statusUpdate);
+                        }
+                    }
+                    else if (type == "symptom-added" || type == "symptom-updated" || type == "symptom-resolved")
+                    {
+                        // For symptom status updates, check by episodeId to avoid duplicates
+                        if (doc.RootElement.TryGetProperty("episodeId", out var episodeIdElement))
+                        {
+                            var episodeId = episodeIdElement.GetInt32();
+                            var alreadyExists = statusList.Any(s =>
+                            {
+                                var sJson = JsonSerializer.Serialize(s);
+                                using var sDoc = JsonDocument.Parse(sJson);
+                                if (sDoc.RootElement.TryGetProperty("episodeId", out var sEpisodeId))
+                                {
+                                    return sEpisodeId.GetInt32() == episodeId && 
+                                           sDoc.RootElement.TryGetProperty("type", out var sType) &&
+                                           sType.GetString() == type;
+                                }
+                                return false;
+                            });
+
+                            if (!alreadyExists)
+                            {
+                                statusList.Add(statusUpdate);
+                            }
+                        }
+                        else
+                        {
+                            // Add even without episodeId if it's from real-time
                             statusList.Add(statusUpdate);
                         }
                     }

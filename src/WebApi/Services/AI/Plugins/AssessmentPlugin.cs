@@ -6,6 +6,7 @@ using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Repositories;
 using WebApi.Services.Chat;
+using WebApi.Services.Chat.Conversations;
 
 namespace WebApi.Services.AI.Plugins;
 

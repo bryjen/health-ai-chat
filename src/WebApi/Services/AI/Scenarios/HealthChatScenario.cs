@@ -12,6 +12,7 @@ using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Services.AI.Plugins;
 using WebApi.Services.Chat;
+using WebApi.Services.Chat.Conversations;
 using WebApi.Services.VectorStore;
 
 namespace WebApi.Services.AI.Scenarios;
@@ -161,7 +162,7 @@ REQUIREMENTS:
 
             // Create plugins and set their context
             var symptomTrackerPlugin = serviceProvider.GetRequiredService<SymptomTrackerPlugin>();
-            symptomTrackerPlugin.SetContext(conversationContext, input.UserId);
+            symptomTrackerPlugin.SetContext(conversationContext, input.UserId, clientConnection);
 
             var assessmentPlugin = serviceProvider.GetRequiredService<AssessmentPlugin>();
             if (input.ConversationId.HasValue)

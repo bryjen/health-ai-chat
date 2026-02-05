@@ -76,6 +76,52 @@ public abstract class ClientConnection
     }
 
     /// <summary>
+    /// Sends a "symptom added" status update with details (fire-and-forget).
+    /// </summary>
+    public void SendSymptomAdded(int episodeId, string symptomName, string? location = null)
+    {
+        var status = new
+        {
+            type = "symptom-added",
+            episodeId = episodeId,
+            symptomName = symptomName,
+            location = location,
+            timestamp = DateTime.UtcNow
+        };
+        SendStatusUpdate(status);
+    }
+
+    /// <summary>
+    /// Sends a "symptom updated" status update (fire-and-forget).
+    /// </summary>
+    public void SendSymptomUpdated(int episodeId, string symptomName)
+    {
+        var status = new
+        {
+            type = "symptom-updated",
+            episodeId = episodeId,
+            symptomName = symptomName,
+            timestamp = DateTime.UtcNow
+        };
+        SendStatusUpdate(status);
+    }
+
+    /// <summary>
+    /// Sends a "symptom resolved" status update (fire-and-forget).
+    /// </summary>
+    public void SendSymptomResolved(int episodeId, string symptomName)
+    {
+        var status = new
+        {
+            type = "symptom-resolved",
+            episodeId = episodeId,
+            symptomName = symptomName,
+            timestamp = DateTime.UtcNow
+        };
+        SendStatusUpdate(status);
+    }
+
+    /// <summary>
     /// Gets all tracked status updates for persistence.
     /// </summary>
     public List<object> GetTrackedStatusUpdates()

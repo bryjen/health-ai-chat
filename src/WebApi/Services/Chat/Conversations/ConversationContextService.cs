@@ -1,7 +1,6 @@
-using WebApi.Models;
 using WebApi.Repositories;
 
-namespace WebApi.Services.Chat;
+namespace WebApi.Services.Chat.Conversations;
 
 /// <summary>
 /// Service for hydrating and managing ConversationContext instances.

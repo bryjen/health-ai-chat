@@ -1,9 +1,11 @@
 using System.ComponentModel;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
+using WebApi.Hubs;
 using WebApi.Models;
 using WebApi.Repositories;
 using WebApi.Services.Chat;
+using WebApi.Services.Chat.Conversations;
 
 namespace WebApi.Services.AI.Plugins;
 
@@ -20,15 +22,17 @@ public class SymptomTrackerPlugin(
 {
     private ConversationContext? _context;
     private Guid _userId;
+    private ClientConnection? _clientConnection;
 
     /// <summary>
-    /// Sets the current conversation context and user ID for this plugin instance.
+    /// Sets the current conversation context, user ID, and client connection for this plugin instance.
     /// Called before kernel function execution.
     /// </summary>
-    public void SetContext(ConversationContext context, Guid userId)
+    public void SetContext(ConversationContext context, Guid userId, ClientConnection? clientConnection = null)
     {
         _context = context;
         _userId = userId;
+        _clientConnection = clientConnection;
     }
 
     [KernelFunction]
@@ -66,6 +70,9 @@ public class SymptomTrackerPlugin(
             _context.ActiveEpisodes.Add(episode);
             _context.ActiveSymptoms.Add(symptom);
             _context.RecentEpisodesBySymptom[name] = episode;
+
+            // Send status update (fire-and-forget)
+            _clientConnection?.SendSymptomAdded(episode.Id, name, null);
 
             logger.LogInformation("Created episode {EpisodeId} for symptom {SymptomName}", episode.Id, name);
             return $"Created episode {episode.Id} for {name}.";
@@ -124,6 +131,10 @@ public class SymptomTrackerPlugin(
                 contextEpisode.Pattern = episode.Pattern;
                 contextEpisode.Stage = episode.Stage;
             }
+
+            // Send status update (fire-and-forget)
+            var symptomName = episode.Symptom?.Name ?? "Unknown symptom";
+            _clientConnection?.SendSymptomUpdated(episodeId, symptomName);
 
             logger.LogInformation("Updated episode {EpisodeId}, stage: {Stage}", episodeId, episode.Stage);
             return $"Updated episode {episodeId}. Stage: {episode.Stage}.";
@@ -191,11 +202,15 @@ public class SymptomTrackerPlugin(
 
             // Update context
             var episode = _context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
+            var symptomName = episode?.Symptom?.Name ?? "Unknown symptom";
             if (episode != null)
             {
                 episode.Status = "resolved";
                 episode.ResolvedAt = DateTime.UtcNow;
             }
+
+            // Send status update (fire-and-forget)
+            _clientConnection?.SendSymptomResolved(episodeId, symptomName);
 
             logger.LogInformation("Resolved episode {EpisodeId}", episodeId);
             return $"Resolved episode {episodeId}.";

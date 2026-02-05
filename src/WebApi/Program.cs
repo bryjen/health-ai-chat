@@ -6,6 +6,7 @@ using WebApi.Repositories;
 using WebApi.Services.AI.Plugins;
 using WebApi.Services.AI.Scenarios;
 using WebApi.Services.Chat;
+using WebApi.Services.Chat.Conversations;
 using WebApi.Services.VectorStore;
 
 var builder = WebApplication.CreateBuilder(args);
