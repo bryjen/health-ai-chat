@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.Connectors.OpenAI;
@@ -61,13 +62,20 @@ public class AssessmentPlugin(
 
     [KernelFunction]
     [Description("CreateAssessment: MANDATORY FUNCTION TO CALL when user requests an assessment, diagnosis, or evaluation. You MUST call this function immediately when user says 'create assessment', 'generate assessment', 'assessment please', or any similar request. DO NOT describe assessments in text - CALL THIS FUNCTION. Parameters: hypothesis (required - your diagnosis as string, e.g. 'viral infection'), confidence (required - 0.0-1.0 decimal, use 0.7 if unsure), differentials (optional - array of alternative diagnoses, can be empty []), reasoning (optional - explanation), recommendedAction (optional - 'see-gp'/'urgent-care'/'emergency'/'self-care', defaults to 'see-gp'). Episode weights are automatically assigned from active symptoms.")]
+    [SuppressMessage("ReSharper", "UnusedMember.Global")]
     public async Task<string> CreateAssessmentAsync(
-        [Description("REQUIRED: Your primary diagnosis or hypothesis as a string (e.g. 'viral infection', 'influenza', 'migraine')")] string hypothesis,
-        [Description("REQUIRED: Confidence level 0.0 to 1.0 decimal (use 0.7 if unsure, 0.8-0.9 if confident)")] decimal confidence,
-        [Description("OPTIONAL: Alternative diagnoses as an array of strings. Can be empty array [] or null if none.")] List<string>? differentials = null,
-        [Description("OPTIONAL: Your reasoning or explanation for the diagnosis")] string reasoning = "",
-        [Description("OPTIONAL: Recommended action - 'see-gp', 'urgent-care', 'emergency', or 'self-care' (defaults to 'see-gp')")] string recommendedAction = "see-gp",
-        [Description("OPTIONAL: Negative finding IDs as an array of integers. Can be empty array [] or null if none.")] List<int>? negativeFindingIds = null)
+        [Description("REQUIRED: Your primary diagnosis or hypothesis as a string (e.g. 'viral infection', 'influenza', 'migraine')")]
+            string hypothesis,
+        [Description("REQUIRED: Confidence level 0.0 to 1.0 decimal (use 0.7 if unsure, 0.8-0.9 if confident)")]
+            decimal confidence,
+        [Description("OPTIONAL: Alternative diagnoses as an array of strings. Can be empty array [] or null if none.")]
+            List<string>? differentials = null,
+        [Description("OPTIONAL: Your reasoning or explanation for the diagnosis")]
+            string reasoning = "",
+        [Description("OPTIONAL: Recommended action - 'see-gp', 'urgent-care', 'emergency', or 'self-care' (defaults to 'see-gp')")]
+            string recommendedAction = "see-gp",
+        [Description("OPTIONAL: Negative finding IDs as an array of integers. Can be empty array [] or null if none.")]
+            List<int>? negativeFindingIds = null)
     {
         logger.LogInformation("[ASSESSMENT_PLUGIN] CreateAssessmentAsync CALLED with hypothesis='{Hypothesis}', confidence={Confidence}, recommendedAction='{RecommendedAction}'",
             hypothesis, confidence, recommendedAction);
@@ -164,6 +172,7 @@ public class AssessmentPlugin(
 
     [KernelFunction]
     [Description("UpdateAssessment: YOU MUST CALL THIS FUNCTION to update an existing assessment when you need to refine or change a previously created assessment. Use this when you have new information that changes the diagnosis, confidence level, or recommendations. Parameters: assessmentId (required - the ID of the assessment to update), then any fields you want to update (hypothesis, confidence, differentials, reasoning, recommendedAction, episodeWeights, negativeFindingIds).")]
+    [SuppressMessage("ReSharper", "UnusedMember.Global")]
     public async Task<string> UpdateAssessmentAsync(
         [Description("The ID of the assessment to update")] int assessmentId,
         [Description("Updated hypothesis or diagnosis")] string? hypothesis = null,

@@ -70,12 +70,14 @@ public class HealthChatOrchestrator(
         // Merge real-time status updates with EntityChanges-based statuses
         logger.LogInformation("[ORCHESTRATOR] Serializing status information. StatusUpdatesSent count: {Count}", 
             routedResponse.StatusUpdatesSent?.Count ?? 0);
+        logger.LogInformation("[ORCHESTRATOR] StatusUpdatesSent (raw): {StatusUpdates}", 
+            routedResponse.StatusUpdatesSent != null ? System.Text.Json.JsonSerializer.Serialize(routedResponse.StatusUpdatesSent) : "null");
         var statusInformationJson = statusSerializer.Serialize(
             symptomChanges,
             appointmentChanges,
             assessmentChanges,
             routedResponse.StatusUpdatesSent);
-        logger.LogInformation("[ORCHESTRATOR] StatusInformationJson length: {Length}", statusInformationJson?.Length ?? 0);
+        logger.LogInformation("[ORCHESTRATOR] StatusInformationJson (raw): {Json}", statusInformationJson ?? "");
 
         var (userMessage, assistantMessage) = await SaveMessagesAsync(
             conversation.Id,
@@ -224,26 +226,43 @@ public class HealthChatOrchestrator(
                 {
                     // Fallback: Parse JSON from response.Message (should be valid JSON even if SubmitFinalResponse wasn't called)
                     logger.LogWarning("SubmitFinalResponse was not called, attempting to parse JSON from response message");
+                    logger.LogInformation("Response message (raw): {Message}", response.Message ?? "");
                     try
                     {
                         if (!string.IsNullOrWhiteSpace(response.Message))
                         {
-                            parsedResponse = System.Text.Json.JsonSerializer.Deserialize<HealthAssistantResponse>(
-                                response.Message,
-                                new System.Text.Json.JsonSerializerOptions
-                                {
-                                    PropertyNameCaseInsensitive = true
-                                }) ?? new HealthAssistantResponse
+                            // Check if it's already JSON
+                            if (response.Message.TrimStart().StartsWith("{") || response.Message.TrimStart().StartsWith("["))
+                            {
+                                parsedResponse = System.Text.Json.JsonSerializer.Deserialize<HealthAssistantResponse>(
+                                    response.Message,
+                                    new System.Text.Json.JsonSerializerOptions
+                                    {
+                                        PropertyNameCaseInsensitive = true
+                                    }) ?? new HealthAssistantResponse
+                                    {
+                                        Message = response.Message,
+                                        Appointment = null,
+                                        SymptomChanges = null,
+                                        StatusUpdatesSent = statusUpdatesSent
+                                    };
+                                
+                                // Ensure status updates are set
+                                parsedResponse.StatusUpdatesSent = statusUpdatesSent;
+                                logger.LogInformation("Successfully parsed JSON response from message");
+                            }
+                            else
+                            {
+                                // Plain text response - wrap it in a structured response
+                                logger.LogInformation("Response is plain text, wrapping in structured response");
+                                parsedResponse = new HealthAssistantResponse
                                 {
                                     Message = response.Message,
                                     Appointment = null,
                                     SymptomChanges = null,
                                     StatusUpdatesSent = statusUpdatesSent
                                 };
-                            
-                            // Ensure status updates are set
-                            parsedResponse.StatusUpdatesSent = statusUpdatesSent;
-                            logger.LogInformation("Successfully parsed JSON response from message");
+                            }
                         }
                         else
                         {
@@ -260,6 +279,8 @@ public class HealthChatOrchestrator(
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Failed to parse JSON from response message, using fallback");
+                        logger.LogInformation("Exception details (raw): {Exception}", ex.ToString());
+                        logger.LogInformation("Response message that failed to parse (raw): {Message}", response.Message ?? "");
                         parsedResponse = new HealthAssistantResponse
                         {
                             Message = response.Message ?? "I apologize, but I encountered an error generating my response.",

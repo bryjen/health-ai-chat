@@ -271,11 +271,13 @@ Call SubmitFinalResponse with:
             var chatHistory = new ChatHistory();
             var systemPrompt = BuildSystemPromptWithContext(conversationContext);
 
-            // TODO: might need to remove
-            // If user is requesting assessment, add explicit reminder to system prompt
+            // Check if user requested assessment (used for both system prompt and retry logic)
             var userMessageLower = input.Message.ToLowerInvariant();
             var assessmentKeywords = new[] { "assessment", "assess", "diagnosis", "evaluate", "evaluation", "generate assessment", "create assessment" };
-            if (assessmentKeywords.Any(keyword => userMessageLower.Contains(keyword)))
+            var assessmentRequested = assessmentKeywords.Any(keyword => userMessageLower.Contains(keyword));
+
+            // If user is requesting assessment, add explicit reminder to system prompt
+            if (assessmentRequested)
             {
                 Logger.LogInformation("User message contains assessment keywords - adding explicit reminder to call CreateAssessment()");
                 systemPrompt += "\n\n*** USER IS REQUESTING AN ASSESSMENT - YOU MUST CALL CreateAssessment() FUNCTION IMMEDIATELY. DO NOT DESCRIBE IT - CALL IT NOW. ***";
@@ -298,6 +300,9 @@ Call SubmitFinalResponse with:
             // Add current user message
             chatHistory.AddUserMessage(input.Message);
 
+            // Store assessment state before call to detect if one was created
+            var assessmentIdBefore = conversationContext.CurrentAssessment?.Id;
+
             // Reset final response before processing
             _finalResponse = null;
 
@@ -305,6 +310,10 @@ Call SubmitFinalResponse with:
             var (responseText, explicitChanges) = await GetChatCompletionWithKernelAsync(
                 requestKernel,
                 chatHistory,
+                assessmentRequested,
+                assessmentIdBefore,
+                conversationContext,
+                clientConnection,
                 cancellationToken);
 
             // Flush context changes
@@ -342,28 +351,14 @@ Call SubmitFinalResponse with:
     }
 
 
-    private string SerializeChatHistoryForLogging(ChatHistory chatHistory)
-    {
-        try
-        {
-            var messages = chatHistory.Select((msg, idx) =>
-            {
-                var role = msg.Role.ToString();
-                var content = msg.Content ?? "";
-                var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
-                return $"[{idx}] {role}: {contentPreview}";
-            }).ToList();
-            return string.Join("\n", messages);
-        }
-        catch (Exception ex)
-        {
-            return $"Error serializing chat history: {ex.Message}";
-        }
-    }
 
     private async Task<(string Response, List<EntityChange> ExplicitChanges)> GetChatCompletionWithKernelAsync(
         Kernel kernel,
         ChatHistory chatHistory,
+        bool assessmentRequested,
+        int? assessmentIdBefore,
+        ConversationContext conversationContext,
+        ClientConnection? clientConnection,
         CancellationToken cancellationToken = default)
     {
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
@@ -394,11 +389,12 @@ Call SubmitFinalResponse with:
         try
         {
             // Log what we're sending to the model
-            var chatHistorySummary = SerializeChatHistoryForLogging(chatHistory);
             var messageCount = chatHistory.Count;
             var totalChars = chatHistory.Sum(m => (m.Content ?? "").Length);
+            var chatHistoryRaw = string.Join("\n", chatHistory.Select((msg, idx) => 
+                $"[{idx}] {msg.Role}: {msg.Content ?? ""}"));
             Logger.LogInformation("[MODEL_CALL] === MAIN CALL START ===\nChat History ({Count} messages, {TotalChars} chars):\n{History}\nSettings: AutoInvokeKernelFunctions=true",
-                messageCount, totalChars, chatHistorySummary);
+                messageCount, totalChars, chatHistoryRaw);
 
             var startTime = DateTime.UtcNow;
 
@@ -411,167 +407,279 @@ Call SubmitFinalResponse with:
                 cancellationToken: cancellationToken);
 
             var duration = DateTime.UtcNow - startTime;
-            var responseMessages = response.Select((msg, idx) =>
-            {
-                var role = msg.Role.ToString();
-                var content = msg.Content ?? "";
-                var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
-                return $"[{idx}] {role}: {contentPreview}";
-            }).ToList();
+            var responseMessagesRaw = string.Join("\n", response.Select((msg, idx) => 
+                $"[{idx}] {msg.Role}: {msg.Content ?? ""}"));
             Logger.LogInformation("[MODEL_CALL] === MAIN CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
-                duration.TotalMilliseconds, response.Count(), string.Join("\n", responseMessages));
+                duration.TotalMilliseconds, response.Count(), responseMessagesRaw);
 
             // Extract final response from the last assistant message
             // AutoInvoke has already handled all tool calls and recursion
             var assistantMessage = response.FirstOrDefault();
+            var assistantContent = assistantMessage?.Content ?? string.Empty;
 
-            if (assistantMessage == null)
+            // Check if response is empty - this often indicates the model tried to call functions but failed
+            if (assistantMessage == null || string.IsNullOrWhiteSpace(assistantContent))
             {
-                Logger.LogWarning("No assistant message returned from chat completion");
-                // Fallback: get last assistant message from chat history
-                var lastAssistantMessage = chatHistory
-                    .LastOrDefault(m => m.Role == AuthorRole.Assistant);
+                Logger.LogWarning("Empty or null assistant message returned from chat completion - this may indicate function calling issues");
+                Logger.LogInformation("Assistant message (raw): null or empty");
 
-                if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
+                // If we have a final response from SubmitFinalResponse, use that even if assistant message is empty
+                if (_finalResponse != null)
                 {
-                    Logger.LogDebug("Using last assistant message from chat history as fallback");
-                    return (lastAssistantMessage.Content, explicitChanges);
+                    Logger.LogInformation("Using SubmitFinalResponse despite empty assistant message");
+                    
+                    // Merge tracked status updates from client connection if available
+                    var trackedStatusUpdatesEmptyMsg = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
+                    if (trackedStatusUpdatesEmptyMsg.Any())
+                    {
+                        Logger.LogInformation("Merging {Count} tracked status updates into SubmitFinalResponse (empty message case)", trackedStatusUpdatesEmptyMsg.Count);
+                        var existingStatusUpdates = _finalResponse.StatusUpdatesSent ?? new List<object>();
+                        var mergedStatusUpdates = existingStatusUpdates.Concat(trackedStatusUpdatesEmptyMsg).ToList();
+                        _finalResponse.StatusUpdatesSent = mergedStatusUpdates;
+                    }
+                    
+                    var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        WriteIndented = false
+                    });
+                    Logger.LogInformation("SubmitFinalResponse JSON (raw): {Json}", jsonResponse);
+                    return (jsonResponse, explicitChanges);
                 }
 
-                return ("I apologize, but I couldn't generate a response.", explicitChanges);
+                // If assessment was requested but not created, or SubmitFinalResponse wasn't called, proceed to retry
+                // Don't return early - let the retry logic handle it
+                if (!assessmentRequested && _finalResponse == null)
+                {
+                    // Fallback: get last assistant message from chat history
+                    var lastAssistantMessage = chatHistory
+                        .LastOrDefault(m => m.Role == AuthorRole.Assistant);
+
+                    // Get tracked status updates from client connection if available
+                    var trackedStatusUpdatesEarlyFallback = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
+                    Logger.LogInformation("Including {Count} tracked status updates in early fallback response", trackedStatusUpdatesEarlyFallback.Count);
+                    
+                    if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
+                    {
+                        Logger.LogInformation("Using last assistant message from chat history as fallback. Content (raw): {Content}", lastAssistantMessage.Content);
+                        // Always return JSON, not plain text
+                        var fallbackResponseFromHistory = new HealthAssistantResponse
+                        {
+                            Message = lastAssistantMessage.Content,
+                            Appointment = null,
+                            SymptomChanges = null,
+                            StatusUpdatesSent = trackedStatusUpdatesEarlyFallback
+                        };
+                        var fallbackJsonFromHistory = JsonSerializer.Serialize(fallbackResponseFromHistory, new JsonSerializerOptions
+                        {
+                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                            WriteIndented = false
+                        });
+                        return (fallbackJsonFromHistory, explicitChanges);
+                    }
+
+                    var errorResponse = new HealthAssistantResponse
+                    {
+                        Message = "I apologize, but I couldn't generate a response.",
+                        Appointment = null,
+                        SymptomChanges = null,
+                        StatusUpdatesSent = trackedStatusUpdatesEarlyFallback
+                    };
+                    var errorJson = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        WriteIndented = false
+                    });
+                    return (errorJson, explicitChanges);
+                }
+                // Otherwise, continue to retry logic below
             }
 
+            // Check if assessment was requested and if it was created
+            // An assessment was created if CurrentAssessment exists and has a different ID than before
+            var assessmentIdAfter = conversationContext.CurrentAssessment?.Id;
+            var assessmentCreated = assessmentRequested &&
+                assessmentIdAfter.HasValue &&
+                assessmentIdAfter.Value != (assessmentIdBefore ?? 0);
+            var assessmentMissing = assessmentRequested && !assessmentCreated;
+
             // Check if SubmitFinalResponse was called (stored in _finalResponse)
-            if (_finalResponse != null)
+            var submitFinalResponseCalled = _finalResponse != null;
+
+            if (submitFinalResponseCalled && !assessmentMissing)
             {
                 Logger.LogInformation("SubmitFinalResponse was called, using structured output");
+                
+                // Merge tracked status updates from client connection if available
+                var trackedStatusUpdatesNormal = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
+                if (trackedStatusUpdatesNormal.Any())
+                {
+                    Logger.LogInformation("Merging {Count} tracked status updates into SubmitFinalResponse", trackedStatusUpdatesNormal.Count);
+                    // Merge with existing status updates, avoiding duplicates
+                    var existingStatusUpdates = _finalResponse.StatusUpdatesSent ?? new List<object>();
+                    var mergedStatusUpdates = existingStatusUpdates.Concat(trackedStatusUpdatesNormal).ToList();
+                    _finalResponse.StatusUpdatesSent = mergedStatusUpdates;
+                }
+                
                 // Serialize the structured response to JSON for backward compatibility
                 var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                     WriteIndented = false
                 });
+                Logger.LogInformation("SubmitFinalResponse JSON (raw): {Json}", jsonResponse);
                 return (jsonResponse, explicitChanges);
             }
 
-            // If SubmitFinalResponse wasn't called, try one more time with explicit instruction
-            Logger.LogWarning("SubmitFinalResponse was not called, making another attempt with explicit instruction");
-
-            // Build a new chat history for the retry that includes the assistant's response
-            var finalRequestHistory = new ChatHistory(chatHistory);
-            finalRequestHistory.AddAssistantMessage(assistantMessage.Content ?? string.Empty);
-
-            // Add a very explicit system message and user message
-            finalRequestHistory.Insert(0, new ChatMessageContent(AuthorRole.System,
-                "CRITICAL INSTRUCTION: You MUST call SubmitFinalResponse function NOW. This is mandatory. Do not respond with text - call the function."));
-            finalRequestHistory.AddUserMessage("You must call SubmitFinalResponse function immediately with: 1) message parameter (your response to the user), 2) appointment details if applicable, 3) symptomChanges if any. This is required - call the function now.");
-
-            // Try again with auto-invoke
-            var retryExecutionSettings = new OpenAIPromptExecutionSettings
+            // Determine what needs to be fixed
+            var needsRetry = !submitFinalResponseCalled || assessmentMissing;
+            if (needsRetry)
             {
-                ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
-            };
-
-            Logger.LogInformation("Making retry call to encourage SubmitFinalResponse");
-            var retryResponse = await chatCompletionService.GetChatMessageContentsAsync(
-                finalRequestHistory,
-                retryExecutionSettings,
-                kernel,
-                cancellationToken: cancellationToken);
-
-            // Log retry response for debugging
-            var retryMessages = retryResponse.Select((msg, idx) =>
-            {
-                var role = msg.Role.ToString();
-                var content = msg.Content ?? "";
-                var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
-                return $"[{idx}] {role}: {contentPreview}";
-            }).ToList();
-            Logger.LogInformation("Retry response ({Count} messages): {Response}",
-                retryResponse.Count(), string.Join("\n", retryMessages));
-
-            // Check again if SubmitFinalResponse was called
-            if (_finalResponse != null)
-            {
-                Logger.LogInformation("SubmitFinalResponse was called in retry, using structured output");
-                var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
+                var issues = new List<string>();
+                if (assessmentMissing)
                 {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = false
-                });
-                return (jsonResponse, explicitChanges);
+                    Logger.LogWarning("Assessment was requested but CreateAssessment() was not called");
+                    issues.Add("CreateAssessment");
+                }
+                if (!submitFinalResponseCalled)
+                {
+                    Logger.LogWarning("SubmitFinalResponse was not called");
+                    issues.Add("SubmitFinalResponse");
+                }
+
+                Logger.LogWarning("Making retry call to fix: {Issues}", string.Join(", ", issues));
+
+                // Build a new chat history for the retry that includes the assistant's response (if any)
+                var retryHistory = new ChatHistory(chatHistory);
+                if (!string.IsNullOrWhiteSpace(assistantContent))
+                {
+                    retryHistory.AddAssistantMessage(assistantContent);
+                }
+
+                // Build explicit retry instructions
+                var retrySystemMessage = "CRITICAL INSTRUCTIONS - YOU MUST FOLLOW THESE STEPS IN ORDER. DO NOT SKIP ANY STEP:\n\n";
+                var retryUserMessage = "You MUST complete these steps in order. Call the functions - do not describe them:\n\n";
+
+                var stepNumber = 1;
+                if (assessmentMissing)
+                {
+                    retrySystemMessage += $"{stepNumber}. FIRST: Call GetActiveEpisodes() to see current symptoms.\n";
+                    stepNumber++;
+                    retrySystemMessage += $"{stepNumber}. THEN: IMMEDIATELY call CreateAssessment() function with these REQUIRED parameters:\n";
+                    retrySystemMessage += "   - hypothesis: Your diagnosis as a string (e.g., 'viral infection', 'influenza', 'musculoskeletal injury')\n";
+                    retrySystemMessage += "   - confidence: 0.7 (decimal between 0.0 and 1.0)\n";
+                    retrySystemMessage += "   - recommendedAction: 'see-gp' (or 'urgent-care'/'emergency'/'self-care' if needed)\n";
+                    retrySystemMessage += "   - differentials: [] (can be empty array)\n";
+                    retrySystemMessage += "   - reasoning: Brief explanation of your diagnosis\n";
+                    retrySystemMessage += "   Example: CreateAssessment(hypothesis=\"viral infection\", confidence=0.7, recommendedAction=\"see-gp\", differentials=[], reasoning=\"Based on symptoms of fever, cough, and body soreness\")\n\n";
+
+                    retryUserMessage += $"STEP {stepNumber - 1}: Call GetActiveEpisodes()\n";
+                    retryUserMessage += $"STEP {stepNumber}: Call CreateAssessment(hypothesis=\"your diagnosis\", confidence=0.7, recommendedAction=\"see-gp\")\n\n";
+                }
+
+                if (!submitFinalResponseCalled)
+                {
+                    retrySystemMessage += $"{stepNumber}. FINALLY: Call SubmitFinalResponse() function with:\n";
+                    retrySystemMessage += "   - message: Your natural language response to the user (REQUIRED)\n";
+                    retrySystemMessage += "   - appointment details if applicable (optional)\n";
+                    retrySystemMessage += "   - symptomChanges if any (optional)\n";
+                    retrySystemMessage += "   Example: SubmitFinalResponse(message=\"I have created an assessment for you. Based on your symptoms...\", ...)\n\n";
+
+                    retryUserMessage += $"STEP {stepNumber}: Call SubmitFinalResponse(message=\"your response message\", ...)\n";
+                }
+
+                retrySystemMessage += "\n**CRITICAL: You MUST call these functions in this exact order. DO NOT respond with text-only messages. CALL THE FUNCTIONS.**";
+                retryUserMessage += "\n\nCall these functions NOW in the order specified above. Do not describe what you will do - call the functions immediately.";
+
+                retryHistory.Insert(0, new ChatMessageContent(AuthorRole.System, retrySystemMessage));
+                retryHistory.AddUserMessage(retryUserMessage);
+
+                // Try again with auto-invoke
+                var retryExecutionSettings = new OpenAIPromptExecutionSettings
+                {
+                    ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
+                };
+
+                var retryResponse = await chatCompletionService.GetChatMessageContentsAsync(
+                    retryHistory,
+                    retryExecutionSettings,
+                    kernel,
+                    cancellationToken: cancellationToken);
+
+                // Log retry response for debugging
+                var retryMessages = retryResponse.Select((msg, idx) =>
+                {
+                    var role = msg.Role.ToString();
+                    var content = msg.Content ?? "";
+                    var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
+                    return $"[{idx}] {role}: {contentPreview}";
+                }).ToList();
+                Logger.LogInformation("Retry response ({Count} messages): {Response}",
+                    retryResponse.Count(), string.Join("\n", retryMessages));
+
+                // Check if assessment was created in retry
+                var assessmentIdAfterRetry = conversationContext.CurrentAssessment?.Id;
+                var assessmentCreatedAfterRetry = assessmentRequested &&
+                    assessmentIdAfterRetry.HasValue &&
+                    assessmentIdAfterRetry.Value != (assessmentIdBefore ?? 0);
+
+                // Check again if SubmitFinalResponse was called
+                if (_finalResponse != null)
+                {
+                    if (assessmentMissing && !assessmentCreatedAfterRetry)
+                    {
+                        Logger.LogWarning("Assessment was still not created after retry");
+                    }
+                    else
+                    {
+                        Logger.LogInformation("SubmitFinalResponse was called in retry, using structured output");
+                    }
+                    
+                    // Merge tracked status updates from client connection if available
+                    var trackedStatusUpdatesRetry = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
+                    if (trackedStatusUpdatesRetry.Any())
+                    {
+                        Logger.LogInformation("Merging {Count} tracked status updates into retry SubmitFinalResponse", trackedStatusUpdatesRetry.Count);
+                        var existingStatusUpdates = _finalResponse.StatusUpdatesSent ?? new List<object>();
+                        var mergedStatusUpdates = existingStatusUpdates.Concat(trackedStatusUpdatesRetry).ToList();
+                        _finalResponse.StatusUpdatesSent = mergedStatusUpdates;
+                    }
+                    
+                    var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
+                    {
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                        WriteIndented = false
+                    });
+                    Logger.LogInformation("Retry SubmitFinalResponse JSON (raw): {Json}", jsonResponse);
+                    return (jsonResponse, explicitChanges);
+                }
             }
 
             // Fallback: construct a response from the assistant message if SubmitFinalResponse still wasn't called
             Logger.LogWarning("SubmitFinalResponse was not called even after retry. Constructing fallback response.");
-            var assistantContent = assistantMessage.Content ?? string.Empty;
-
-            // If we have content, construct a proper HealthAssistantResponse
-            if (!string.IsNullOrWhiteSpace(assistantContent))
+            Logger.LogInformation("Assistant content (raw): {Content}", assistantContent ?? "");
+            
+            // Get tracked status updates from client connection if available
+            var trackedStatusUpdates = clientConnection?.GetTrackedStatusUpdates() ?? new List<object>();
+            Logger.LogInformation("Including {Count} tracked status updates in fallback response", trackedStatusUpdates.Count);
+            
+            // Always construct a proper JSON response, even if content is plain text
+            var fallbackStructuredResponse = new HealthAssistantResponse
             {
-                // Try to extract JSON from the response if it exists
-                var extractedJson = ExtractJsonFromResponse(assistantContent);
-                if (IsValidJson(extractedJson))
-                {
-                    try
-                    {
-                        var parsedResponse = JsonSerializer.Deserialize<HealthAssistantResponse>(extractedJson, new JsonSerializerOptions
-                        {
-                            PropertyNameCaseInsensitive = true
-                        });
-                        if (parsedResponse != null && !string.IsNullOrWhiteSpace(parsedResponse.Message))
-                        {
-                            Logger.LogInformation("Successfully parsed JSON from assistant message");
-                            var jsonResponse = JsonSerializer.Serialize(parsedResponse, new JsonSerializerOptions
-                            {
-                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                                WriteIndented = false
-                            });
-                            return (jsonResponse, explicitChanges);
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.LogWarning(ex, "Failed to parse JSON from assistant message");
-                    }
-                }
-
-                // Construct a basic response from the text
-                var fallbackStructuredResponse = new HealthAssistantResponse
-                {
-                    Message = assistantContent,
-                    Appointment = null,
-                    SymptomChanges = null,
-                    StatusUpdatesSent = new List<object>()
-                };
-
-                var fallbackJson = JsonSerializer.Serialize(fallbackStructuredResponse, new JsonSerializerOptions
-                {
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    WriteIndented = false
-                });
-
-                Logger.LogInformation("Using fallback structured response constructed from assistant message");
-                return (fallbackJson, explicitChanges);
-            }
-
-            // Last resort fallback
-            Logger.LogWarning("No response content available, using error message");
-            var errorResponse = new HealthAssistantResponse
-            {
-                Message = "I apologize, but I encountered an error generating my response. Please try again.",
+                Message = assistantContent ?? "I apologize, but I encountered an error generating my response.",
                 Appointment = null,
                 SymptomChanges = null,
-                StatusUpdatesSent = new List<object>()
+                StatusUpdatesSent = trackedStatusUpdates
             };
 
-            var errorJson = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
+            var fallbackJson = JsonSerializer.Serialize(fallbackStructuredResponse, new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 WriteIndented = false
             });
 
-            return (errorJson, explicitChanges);
+            Logger.LogInformation("Using fallback structured response. JSON: {Json}", fallbackJson);
+            return (fallbackJson, explicitChanges);
         }
         catch (Exception ex)
         {
@@ -662,63 +770,6 @@ Call SubmitFinalResponse with:
         return contextMessages;
     }
 
-    private static bool IsValidJson(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return false;
-
-        try
-        {
-            using var doc = System.Text.Json.JsonDocument.Parse(text);
-            return doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    private static string ExtractJsonFromResponse(string response)
-    {
-        // Remove markdown code blocks if present
-        var json = response.Trim();
-        if (json.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-        {
-            json = json.Substring(7);
-        }
-
-        if (json.StartsWith("```", StringComparison.OrdinalIgnoreCase))
-        {
-            json = json.Substring(3);
-        }
-
-        if (json.EndsWith("```", StringComparison.OrdinalIgnoreCase))
-        {
-            json = json.Substring(0, json.Length - 3);
-        }
-
-        json = json.Trim();
-
-        // Try to find JSON object boundaries if JSON is mixed with text
-        var firstBrace = json.IndexOf('{');
-        var lastBrace = json.LastIndexOf('}');
-
-        if (firstBrace >= 0 && lastBrace > firstBrace)
-        {
-            var jsonObject = json.Substring(firstBrace, lastBrace - firstBrace + 1);
-            try
-            {
-                using var doc = System.Text.Json.JsonDocument.Parse(jsonObject);
-                return jsonObject;
-            }
-            catch
-            {
-                // If extraction fails, return original
-            }
-        }
-
-        return json;
-    }
 
     /// <summary>
     /// Stores the final response from SubmitFinalResponse tool call for retrieval by orchestrator.
@@ -790,8 +841,12 @@ Call SubmitFinalResponse with:
             StatusUpdatesSent = new List<object>()
         };
 
-        Logger.LogInformation("[SUBMIT_FINAL_RESPONSE] Stored final response with message: {Message}",
-            _finalResponse.Message.Substring(0, Math.Min(100, _finalResponse.Message.Length)));
+        var storedJson = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        });
+        Logger.LogInformation("[SUBMIT_FINAL_RESPONSE] Stored final response JSON (raw): {Json}", storedJson);
 
         return "Final response submitted successfully.";
     }
