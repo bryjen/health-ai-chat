@@ -50,6 +50,7 @@ builder.Services.AddScoped<VectorStoreRepository>();
 // Health chat services
 builder.Services.AddScoped<VectorStoreService>();
 builder.Services.AddScoped<ConversationContextService>();
+builder.Services.AddScoped<ClientConnectionService>();
 builder.Services.AddScoped<SymptomTrackerPlugin>();
 builder.Services.AddScoped<AssessmentPlugin>();
 builder.Services.AddScoped<HealthChatScenario>();

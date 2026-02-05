@@ -26,6 +26,7 @@ public partial class HealthChatScenario(
     VectorStoreService vectorStoreService,
     IOptions<VectorStoreSettings> vectorStoreSettings,
     ConversationContextService contextService,
+    ClientConnectionService clientConnectionService,
     IServiceProvider serviceProvider,
     ILogger<HealthChatScenario> logger)
     : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>(kernel, logger)
@@ -47,22 +48,28 @@ public partial class HealthChatScenario(
 
 **Step 1: User reports symptoms**
 - IMMEDIATELY call CreateSymptomWithEpisode() for EACH symptom mentioned
-- Then call GetActiveEpisodes() to check for existing episodes
+- Call GetActiveEpisodes() to check for existing episodes and avoid duplicates
 - Ask follow-up questions about severity, location, frequency, triggers, relievers, pattern
 - As you learn each detail, call UpdateEpisode() to save it
+- Use GetActiveEpisodes() whenever you need to see what symptoms are currently active
 
 **Step 2: User denies symptoms**
 - IMMEDIATELY call RecordNegativeFinding() for each denied symptom
 
 **Step 3: Create assessment**
+- **BEFORE creating an assessment, ALWAYS call GetActiveEpisodes() to see what symptoms the user has**
 - **CALL CreateAssessment() IMMEDIATELY when user says:**
   - ""create assessment"", ""regenerate assessment"", ""make assessment"", ""assessment""
   - ""call createassessment"", ""call createassessment function""
   - OR when you have enough info for a diagnosis
+- **ALWAYS use CreateAssessment() - it creates a new assessment each time (even for ""regenerate"")**
 - **DO NOT describe assessments in text - CALL THE FUNCTION**
-- **Example call:** CreateAssessment(hypothesis=""acute pharyngitis"", confidence=0.75, recommendedAction=""see-gp"")
+- **Example workflow:** 
+  1. Call GetActiveEpisodes() to see current symptoms
+  2. Review the symptoms and conversation history
+  3. Call CreateAssessment(hypothesis=""your diagnosis"", confidence=0.7, recommendedAction=""see-gp"")
 - Required: hypothesis (your diagnosis as a string), confidence (0.0-1.0 decimal, use 0.7 if unsure)
-- Optional: differentials (comma-separated alternatives), reasoning (explanation), recommendedAction (defaults to ""see-gp"")
+- Optional: differentials (list of alternative diagnoses), reasoning (explanation), recommendedAction (defaults to ""see-gp"")
 - The function will save the assessment - you don't need to describe it, just call it
 
 **Step 4: Final response**
@@ -112,6 +119,34 @@ REQUIREMENTS:
         return SystemPromptTemplate;
     }
 
+    /// <summary>
+    /// Builds the system prompt with minimal context injection (just active episode names).
+    /// This gives the model awareness of what symptoms exist without cluttering the prompt.
+    /// </summary>
+    private string BuildSystemPromptWithContext(ConversationContext context)
+    {
+        var prompt = SystemPromptTemplate;
+
+        // Add minimal context: just the names of active symptoms
+        // This helps the model know what exists without overwhelming it with details
+        if (context.ActiveEpisodes.Any())
+        {
+            var symptomNames = context.ActiveEpisodes
+                .Where(e => e.Symptom != null)
+                .Select(e => e.Symptom!.Name)
+                .Distinct()
+                .ToList();
+            
+            if (symptomNames.Any())
+            {
+                prompt += $"\n\n**Current Active Symptoms:** {string.Join(", ", symptomNames)}";
+                prompt += "\nUse GetActiveEpisodes() if you need more details about these symptoms.";
+            }
+        }
+
+        return prompt;
+    }
+
     /// <inheritdoc/>
     protected override async Task<string?> GetEmbeddingsContextAsync(
         HealthChatScenarioRequest input,
@@ -155,20 +190,21 @@ REQUIREMENTS:
 
         try
         {
-            // Hydrate conversation context
+            // Hydrate conversation context (becomes the scoped instance)
+            Logger.LogDebug("Hydrating context for UserId: {UserId}, ConversationId: {ConversationId}", 
+                input.UserId, input.ConversationId);
             var conversationContext = await contextService.HydrateContextAsync(
                 input.UserId,
                 input.ConversationId);
+            Logger.LogDebug("Context hydrated. ConversationId in context: {ConversationId}", 
+                conversationContext.ConversationId);
 
-            // Create plugins and set their context
+            // Set client connection for plugins to access
+            clientConnectionService.CurrentConnection = clientConnection;
+
+            // Get plugins (they will use the scoped context from ConversationContextService)
             var symptomTrackerPlugin = serviceProvider.GetRequiredService<SymptomTrackerPlugin>();
-            symptomTrackerPlugin.SetContext(conversationContext, input.UserId, clientConnection);
-
             var assessmentPlugin = serviceProvider.GetRequiredService<AssessmentPlugin>();
-            if (input.ConversationId.HasValue)
-            {
-                assessmentPlugin.SetContext(conversationContext, input.UserId, input.ConversationId.Value, clientConnection);
-            }
 
             // Create a kernel instance for this request with plugins
             var chatCompletionService = Kernel.GetRequiredService<IChatCompletionService>();
@@ -185,6 +221,13 @@ REQUIREMENTS:
             // Add plugins to kernel
             requestKernel.Plugins.AddFromObject(symptomTrackerPlugin, "SymptomTracker");
             requestKernel.Plugins.AddFromObject(assessmentPlugin, "Assessment");
+            
+            // Log available functions for debugging
+            var availableFunctions = requestKernel.Plugins
+                .SelectMany(p => p.Select(f => $"{p.Name}.{f.Name}"))
+                .ToList();
+            Logger.LogDebug("Registered {Count} kernel functions: {Functions}", 
+                availableFunctions.Count, string.Join(", ", availableFunctions));
 
             // Get conversation context messages
             var contextMessages = await GetConversationContextAsync(input.ConversationId, cancellationToken);
@@ -200,11 +243,9 @@ REQUIREMENTS:
             // Limit context messages
             contextMessages = LimitContextMessages(contextMessages);
 
-            // Build system prompt with context summary
-            var systemPrompt = BuildSystemPromptWithContext(conversationContext);
-
-            // Build chat history
+            // Build chat history with context-aware system prompt
             var chatHistory = new ChatHistory();
+            var systemPrompt = BuildSystemPromptWithContext(conversationContext);
             chatHistory.AddSystemMessage(systemPrompt);
 
             // Add context messages in chronological order
@@ -251,32 +292,6 @@ REQUIREMENTS:
         }
     }
 
-    private string BuildSystemPromptWithContext(ConversationContext context)
-    {
-        var prompt = SystemPromptTemplate;
-
-        if (context.ActiveEpisodes.Any())
-        {
-            var episodesSummary = string.Join(", ",
-                context.ActiveEpisodes.Select(e => $"{e.Symptom?.Name ?? "Unknown"} (stage: {e.Stage})"));
-            prompt += $"\n\nCurrent active episodes: {episodesSummary}";
-        }
-
-        if (context.NegativeFindings.Any())
-        {
-            var negativeSummary = string.Join(", ",
-                context.NegativeFindings.Select(nf => nf.SymptomName));
-            prompt += $"\n\nRecent negative findings (user confirmed they don't have): {negativeSummary}";
-        }
-
-        if (context.CurrentAssessment != null)
-        {
-            prompt +=
-                $"\n\nCurrent assessment: {context.CurrentAssessment.Hypothesis} (confidence: {context.CurrentAssessment.Confidence:P0})";
-        }
-
-        return prompt;
-    }
 
     private async Task<(string Response, List<EntityChange> ExplicitChanges)> GetChatCompletionWithKernelAsync(
         Kernel kernel,
@@ -284,6 +299,14 @@ REQUIREMENTS:
         CancellationToken cancellationToken = default)
     {
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
+        
+        // Log available functions before calling
+        var availableFunctions = kernel.Plugins
+            .SelectMany(p => p.Select(f => $"{p.Name}.{f.Name}"))
+            .ToList();
+        Logger.LogInformation("Available kernel functions before chat completion: {Functions}", 
+            string.Join(", ", availableFunctions));
+        
         var executionSettings = new OpenAIPromptExecutionSettings
         {
             ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions

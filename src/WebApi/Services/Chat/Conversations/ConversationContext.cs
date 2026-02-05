@@ -8,6 +8,10 @@ namespace WebApi.Services.Chat.Conversations;
 /// </summary>
 public class ConversationContext
 {
+    // Request identifiers
+    public Guid UserId { get; set; }
+    public Guid? ConversationId { get; set; }
+
     // Working memory
     public List<Symptom> ActiveSymptoms { get; set; } = new();
     public List<Episode> ActiveEpisodes { get; set; } = new();

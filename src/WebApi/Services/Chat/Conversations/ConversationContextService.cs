@@ -5,6 +5,7 @@ namespace WebApi.Services.Chat.Conversations;
 /// <summary>
 /// Service for hydrating and managing ConversationContext instances.
 /// Handles loading active episodes, recent history, and persisting changes.
+/// Manages a single scoped instance per request.
 /// </summary>
 public class ConversationContextService(
     EpisodeRepository episodeRepository,
@@ -13,14 +14,34 @@ public class ConversationContextService(
     AssessmentRepository assessmentRepository,
     ILogger<ConversationContextService> logger)
 {
+    private ConversationContext? _currentContext;
+
+    /// <summary>
+    /// Gets the current scoped ConversationContext instance.
+    /// Throws if context has not been hydrated.
+    /// </summary>
+    public ConversationContext GetCurrentContext()
+    {
+        if (_currentContext == null)
+        {
+            throw new InvalidOperationException("ConversationContext has not been hydrated. Call HydrateContextAsync first.");
+        }
+        return _currentContext;
+    }
+
     /// <summary>
     /// Hydrates a ConversationContext with active episodes and recent history for a user.
+    /// This becomes the scoped instance for the current request.
     /// </summary>
     public async Task<ConversationContext> HydrateContextAsync(
         Guid userId,
         Guid? conversationId = null)
     {
-        var context = new ConversationContext();
+        var context = new ConversationContext
+        {
+            UserId = userId,
+            ConversationId = conversationId
+        };
 
         try
         {
@@ -78,6 +99,8 @@ public class ConversationContextService(
             throw;
         }
 
+        // Store as the scoped instance for this request
+        _currentContext = context;
         return context;
     }
 

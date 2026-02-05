@@ -30,6 +30,7 @@ public class HealthChatOrchestrator(
         ClientConnection? clientConnection = null)
     {
         var (conversation, isNewConversation) = await GetOrCreateConversationAsync(userId, message, conversationId);
+        logger.LogDebug("Processing message for conversation {ConversationId} (IsNew: {IsNew})", conversation.Id, isNewConversation);
 
         var (healthResponse, explicitChanges) = await ProcessMessageAsync(
             userId,
@@ -191,6 +192,7 @@ public class HealthChatOrchestrator(
     {
         try
         {
+            logger.LogDebug("Creating HealthChatScenarioRequest with ConversationId: {ConversationId}", conversationId);
             var request = new HealthChatScenarioRequest
             {
                 Message = userMessage,

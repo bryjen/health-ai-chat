@@ -17,22 +17,18 @@ public class SymptomTrackerPlugin(
     SymptomRepository symptomRepository,
     EpisodeRepository episodeRepository,
     NegativeFindingRepository negativeFindingRepository,
-    ConversationContextService _,
+    ConversationContextService contextService,
+    ClientConnectionService clientConnectionService,
     ILogger<SymptomTrackerPlugin> logger)
 {
-    private ConversationContext? _context;
-    private Guid _userId;
-    private ClientConnection? _clientConnection;
-
-    /// <summary>
-    /// Sets the current conversation context, user ID, and client connection for this plugin instance.
-    /// Called before kernel function execution.
-    /// </summary>
-    public void SetContext(ConversationContext context, Guid userId, ClientConnection? clientConnection = null)
+    private ConversationContext GetContext()
     {
-        _context = context;
-        _userId = userId;
-        _clientConnection = clientConnection;
+        return contextService.GetCurrentContext();
+    }
+
+    private ClientConnection? GetClientConnection()
+    {
+        return clientConnectionService.CurrentConnection;
     }
 
     [KernelFunction]
@@ -41,18 +37,16 @@ public class SymptomTrackerPlugin(
         [Description("The name of the symptom")] string name,
         [Description("Optional description of the symptom")] string? description = null)
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set. Call SetContext before using plugin functions.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
         try
         {
             // Get or create symptom type
-            var symptom = await symptomRepository.GetOrCreateSymptomAsync(_userId, name, description);
+            var symptom = await symptomRepository.GetOrCreateSymptomAsync(context.UserId, name, description);
 
             // Check if there's a recent episode for this symptom
-            if (_context.RecentEpisodesBySymptom.TryGetValue(name, out var recentEpisode))
+            if (context.RecentEpisodesBySymptom.TryGetValue(name, out var recentEpisode))
             {
                 logger.LogInformation("Found recent episode {EpisodeId} for symptom {SymptomName}", recentEpisode.Id, name);
                 return $"Found existing episode {recentEpisode.Id} for {name}. Use UpdateEpisode to add details.";
@@ -60,19 +54,19 @@ public class SymptomTrackerPlugin(
 
             // Create new episode
             var episode = await episodeRepository.CreateEpisodeAsync(
-                _userId,
+                context.UserId,
                 symptom.Id,
                 DateTime.UtcNow,
                 stage: "mentioned",
                 status: "active");
 
             // Update context
-            _context.ActiveEpisodes.Add(episode);
-            _context.ActiveSymptoms.Add(symptom);
-            _context.RecentEpisodesBySymptom[name] = episode;
+            context.ActiveEpisodes.Add(episode);
+            context.ActiveSymptoms.Add(symptom);
+            context.RecentEpisodesBySymptom[name] = episode;
 
             // Send status update (fire-and-forget)
-            _clientConnection?.SendSymptomAdded(episode.Id, name, null);
+            clientConnection?.SendSymptomAdded(episode.Id, name, null);
 
             logger.LogInformation("Created episode {EpisodeId} for symptom {SymptomName}", episode.Id, name);
             return $"Created episode {episode.Id} for {name}.";
@@ -85,33 +79,28 @@ public class SymptomTrackerPlugin(
     }
 
     [KernelFunction]
-    [Description("UpdateEpisode: YOU MUST CALL THIS FUNCTION to add details to an episode (severity, location, frequency, triggers, relievers, pattern). Call this every time you learn new information about a symptom episode. Parameters: episodeId (required), then any details you learned (severity 1-10, location, frequency constant/intermittent/occasional, triggers comma-separated, relievers comma-separated, pattern description).")]
+    [Description("UpdateEpisode: YOU MUST CALL THIS FUNCTION to add details to an episode (severity, location, frequency, triggers, relievers, pattern). Call this every time you learn new information about a symptom episode. Parameters: episodeId (required), then any details you learned (severity 1-10, location, frequency constant/intermittent/occasional, triggers list, relievers list, pattern description).")]
     public async Task<string> UpdateEpisodeAsync(
         [Description("The ID of the episode to update")] int episodeId,
         [Description("Severity on a scale of 1-10")] int? severity = null,
         [Description("Location where the symptom occurs")] string? location = null,
         [Description("Frequency: constant, intermittent, or occasional")] string? frequency = null,
-        [Description("Comma-separated list of triggers")] string? triggers = null,
-        [Description("Comma-separated list of relievers")] string? relievers = null,
+        [Description("List of triggers")] List<string>? triggers = null,
+        [Description("List of relievers")] List<string>? relievers = null,
         [Description("Pattern description (e.g., 'worse in morning')")] string? pattern = null)
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
         try
         {
-            var triggersList = triggers != null ? triggers.Split(',').Select(t => t.Trim()).ToList() : null;
-            var relieversList = relievers != null ? relievers.Split(',').Select(r => r.Trim()).ToList() : null;
-
             var episode = await episodeRepository.UpdateEpisodeAsync(
                 episodeId,
                 severity,
                 location,
                 frequency,
-                triggersList,
-                relieversList,
+                triggers,
+                relievers,
                 pattern);
 
             if (episode == null)
@@ -120,7 +109,7 @@ public class SymptomTrackerPlugin(
             }
 
             // Update context
-            var contextEpisode = _context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
+            var contextEpisode = context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
             if (contextEpisode != null)
             {
                 contextEpisode.Severity = episode.Severity;
@@ -134,7 +123,7 @@ public class SymptomTrackerPlugin(
 
             // Send status update (fire-and-forget)
             var symptomName = episode.Symptom?.Name ?? "Unknown symptom";
-            _clientConnection?.SendSymptomUpdated(episodeId, symptomName);
+            clientConnection?.SendSymptomUpdated(episodeId, symptomName);
 
             logger.LogInformation("Updated episode {EpisodeId}, stage: {Stage}", episodeId, episode.Stage);
             return $"Updated episode {episodeId}. Stage: {episode.Stage}.";
@@ -152,13 +141,13 @@ public class SymptomTrackerPlugin(
         [Description("The ID of the episode to link")] int episodeId,
         [Description("The ID of the related episode")] int relatedEpisodeId)
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
         try
         {
+            clientConnection?.SendProcessing("Linking episodes");
+            
             var success = await episodeRepository.LinkEpisodesAsync(episodeId, relatedEpisodeId);
             if (!success)
             {
@@ -166,12 +155,14 @@ public class SymptomTrackerPlugin(
             }
 
             // Update context
-            var episode = _context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
+            var episode = context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
+            var symptomName = episode?.Symptom?.Name ?? "Unknown symptom";
             if (episode != null)
             {
                 episode.Stage = "linked";
             }
 
+            clientConnection?.SendCompleted($"Linked {symptomName} episode");
             logger.LogInformation("Linked episode {EpisodeId} to {RelatedEpisodeId}", episodeId, relatedEpisodeId);
             return $"Linked episode {episodeId} to episode {relatedEpisodeId}.";
         }
@@ -187,10 +178,8 @@ public class SymptomTrackerPlugin(
     public async Task<string> ResolveEpisodeAsync(
         [Description("The ID of the episode to resolve")] int episodeId)
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
         try
         {
@@ -201,7 +190,7 @@ public class SymptomTrackerPlugin(
             }
 
             // Update context
-            var episode = _context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
+            var episode = context.ActiveEpisodes.FirstOrDefault(e => e.Id == episodeId);
             var symptomName = episode?.Symptom?.Name ?? "Unknown symptom";
             if (episode != null)
             {
@@ -210,7 +199,7 @@ public class SymptomTrackerPlugin(
             }
 
             // Send status update (fire-and-forget)
-            _clientConnection?.SendSymptomResolved(episodeId, symptomName);
+            clientConnection?.SendSymptomResolved(episodeId, symptomName);
 
             logger.LogInformation("Resolved episode {EpisodeId}", episodeId);
             return $"Resolved episode {episodeId}.";
@@ -228,21 +217,22 @@ public class SymptomTrackerPlugin(
         [Description("The name of the symptom the user does not have")] string symptomName,
         [Description("Optional episode ID if this relates to a specific episode")] int? episodeId = null)
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
         try
         {
+            clientConnection?.SendProcessing($"Recording negative finding for {symptomName}");
+            
             var negativeFinding = await negativeFindingRepository.RecordNegativeFindingAsync(
-                _userId,
+                context.UserId,
                 symptomName,
                 episodeId);
 
             // Update context
-            _context.NegativeFindings.Add(negativeFinding);
+            context.NegativeFindings.Add(negativeFinding);
 
+            clientConnection?.SendCompleted($"Recorded that {symptomName} is not present");
             logger.LogInformation("Recorded negative finding for {SymptomName}", symptomName);
             return $"Recorded that user does not have {symptomName}.";
         }
@@ -257,15 +247,17 @@ public class SymptomTrackerPlugin(
     [Description("GetActiveEpisodes: CALL THIS FUNCTION to check what symptoms/episodes the user currently has active. Use this before creating new episodes to avoid duplicates. Returns a list of active episode IDs and their stages.")]
     public string GetActiveEpisodes()
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
-        var episodes = _context.ActiveEpisodes
+        clientConnection?.SendProcessing("Retrieving active episodes");
+
+        var episodes = context.ActiveEpisodes
             .Where(e => e.Status == "active")
             .Select(e => $"{e.Id}: {e.Symptom?.Name ?? "Unknown"} - {e.Stage}")
             .ToList();
+
+        clientConnection?.SendCompleted("Retrieved active episodes");
 
         if (!episodes.Any())
         {
@@ -280,14 +272,16 @@ public class SymptomTrackerPlugin(
     public async Task<string> GetSymptomHistoryAsync(
         [Description("The name of the symptom to get history for")] string symptomName)
     {
-        if (_context == null)
-        {
-            throw new InvalidOperationException("Context not set.");
-        }
+        var context = GetContext();
+        var clientConnection = GetClientConnection();
 
         try
         {
-            var episodes = await episodeRepository.GetEpisodesBySymptomAsync(_userId, symptomName);
+            clientConnection?.SendProcessing($"Retrieving history for {symptomName}");
+            
+            var episodes = await episodeRepository.GetEpisodesBySymptomAsync(context.UserId, symptomName);
+
+            clientConnection?.SendCompleted($"Retrieved history for {symptomName}");
 
             if (!episodes.Any())
             {

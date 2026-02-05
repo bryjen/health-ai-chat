@@ -122,6 +122,36 @@ public abstract class ClientConnection
     }
 
     /// <summary>
+    /// Sends a generic "processing" status update (fire-and-forget).
+    /// Use this for actions that don't have specific status messages.
+    /// </summary>
+    public void SendProcessing(string actionDescription)
+    {
+        var status = new
+        {
+            type = "processing",
+            message = $"Processing: {actionDescription}",
+            timestamp = DateTime.UtcNow
+        };
+        SendStatusUpdate(status);
+    }
+
+    /// <summary>
+    /// Sends a generic "completed" status update (fire-and-forget).
+    /// Use this for actions that complete successfully but don't have specific status messages.
+    /// </summary>
+    public void SendCompleted(string actionDescription)
+    {
+        var status = new
+        {
+            type = "completed",
+            message = $"Completed: {actionDescription}",
+            timestamp = DateTime.UtcNow
+        };
+        SendStatusUpdate(status);
+    }
+
+    /// <summary>
     /// Gets all tracked status updates for persistence.
     /// </summary>
     public List<object> GetTrackedStatusUpdates()
