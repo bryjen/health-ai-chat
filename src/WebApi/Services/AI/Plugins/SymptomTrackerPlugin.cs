@@ -18,9 +18,15 @@ public class SymptomTrackerPlugin(
     EpisodeRepository episodeRepository,
     NegativeFindingRepository negativeFindingRepository,
     ConversationContextService contextService,
-    ClientConnectionService clientConnectionService,
     ILogger<SymptomTrackerPlugin> logger)
 {
+    private ClientConnection? _clientConnection;
+
+    public void SetConnection(ClientConnection? clientConnection)
+    {
+        _clientConnection = clientConnection;
+    }
+
     private ConversationContext GetContext()
     {
         return contextService.GetCurrentContext();
@@ -28,7 +34,7 @@ public class SymptomTrackerPlugin(
 
     private ClientConnection? GetClientConnection()
     {
-        return clientConnectionService.CurrentConnection;
+        return _clientConnection;
     }
 
     [KernelFunction]
@@ -147,7 +153,7 @@ public class SymptomTrackerPlugin(
         try
         {
             clientConnection?.SendProcessing("Linking episodes");
-            
+
             var success = await episodeRepository.LinkEpisodesAsync(episodeId, relatedEpisodeId);
             if (!success)
             {
@@ -223,7 +229,7 @@ public class SymptomTrackerPlugin(
         try
         {
             clientConnection?.SendProcessing($"Recording negative finding for {symptomName}");
-            
+
             var negativeFinding = await negativeFindingRepository.RecordNegativeFindingAsync(
                 context.UserId,
                 symptomName,
@@ -278,7 +284,7 @@ public class SymptomTrackerPlugin(
         try
         {
             clientConnection?.SendProcessing($"Retrieving history for {symptomName}");
-            
+
             var episodes = await episodeRepository.GetEpisodesBySymptomAsync(context.UserId, symptomName);
 
             clientConnection?.SendCompleted($"Retrieved history for {symptomName}");

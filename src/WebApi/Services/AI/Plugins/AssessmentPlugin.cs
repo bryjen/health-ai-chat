@@ -29,15 +29,21 @@ public class EpisodeWeight
 public class AssessmentPlugin(
     AssessmentRepository assessmentRepository,
     ConversationContextService contextService,
-    ClientConnectionService clientConnectionService,
     ILogger<AssessmentPlugin> logger)
 {
+    private ClientConnection? _clientConnection;
+
+    public void SetConnection(ClientConnection? clientConnection)
+    {
+        _clientConnection = clientConnection;
+    }
+
     private ConversationContext GetContext()
     {
         try
         {
             var context = contextService.GetCurrentContext();
-            logger.LogDebug("Retrieved context. UserId: {UserId}, ConversationId: {ConversationId}", 
+            logger.LogDebug("Retrieved context. UserId: {UserId}, ConversationId: {ConversationId}",
                 context.UserId, context.ConversationId);
             return context;
         }
@@ -50,7 +56,7 @@ public class AssessmentPlugin(
 
     private ClientConnection? GetClientConnection()
     {
-        return clientConnectionService.CurrentConnection;
+        return _clientConnection;
     }
 
     [KernelFunction]
@@ -63,7 +69,7 @@ public class AssessmentPlugin(
         [Description("OPTIONAL: Recommended action - 'see-gp', 'urgent-care', 'emergency', or 'self-care' (defaults to 'see-gp')")] string recommendedAction = "see-gp",
         [Description("OPTIONAL: Negative finding IDs as an array of integers. Can be empty array [] or null if none.")] List<int>? negativeFindingIds = null)
     {
-        logger.LogInformation("[ASSESSMENT_PLUGIN] CreateAssessmentAsync CALLED with hypothesis='{Hypothesis}', confidence={Confidence}, recommendedAction='{RecommendedAction}'", 
+        logger.LogInformation("[ASSESSMENT_PLUGIN] CreateAssessmentAsync CALLED with hypothesis='{Hypothesis}', confidence={Confidence}, recommendedAction='{RecommendedAction}'",
             hypothesis, confidence, recommendedAction);
         try
         {
@@ -78,7 +84,7 @@ public class AssessmentPlugin(
 
             // Send "Generating assessment..." status (fire-and-forget)
             clientConnection?.SendGeneratingAssessment();
-            
+
             // Normalize differentials - filter out empty strings and trim
             var normalizedDifferentials = (differentials ?? new List<string>())
                 .Where(d => !string.IsNullOrWhiteSpace(d))
@@ -88,7 +94,7 @@ public class AssessmentPlugin(
             {
                 normalizedDifferentials = null;
             }
-            
+
             // Use provided negative finding IDs or get from context
             var negativeFindingIdsList = (negativeFindingIds != null && negativeFindingIds.Any())
                 ? negativeFindingIds
@@ -146,11 +152,11 @@ public class AssessmentPlugin(
         {
             logger.LogError(ex, "Error creating assessment. Exception type: {ExceptionType}, Message: {Message}, StackTrace: {StackTrace}",
                 ex.GetType().Name, ex.Message, ex.StackTrace);
-            
+
             // Log the actual parameters that were passed for debugging
             logger.LogError("CreateAssessment parameters - Hypothesis: {Hypothesis}, Confidence: {Confidence}, Differentials: {Differentials}, Reasoning: {Reasoning}, RecommendedAction: {RecommendedAction}",
                 hypothesis, confidence, differentials != null ? string.Join(", ", differentials) : "null", reasoning, recommendedAction);
-            
+
             // Return a more helpful error message that doesn't confuse the AI
             return $"Failed to create assessment due to a technical error. Please try again or contact support if the issue persists.";
         }

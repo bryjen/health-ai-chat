@@ -19,7 +19,6 @@ public class HealthChatOrchestrator(
     VectorStoreService vectorStoreService,
     AppDbContext context,
     StatusInformationSerializer statusSerializer,
-    HealthResponseParser responseParser,
     EntityChangeTracker changeTracker,
     ILogger<HealthChatOrchestrator> logger)
 {
@@ -203,23 +202,87 @@ public class HealthChatOrchestrator(
             HealthChatScenarioResponse response;
             List<object> statusUpdatesSent = new();
             List<EntityChange> explicitChanges = new();
+            HealthAssistantResponse parsedResponse;
+            
             if (scenario is HealthChatScenario healthChatScenario)
             {
                 response = await healthChatScenario.ExecuteAsyncInternal(request, cancellationToken,
                     clientConnection);
                 statusUpdatesSent = response.StatusUpdatesSent ?? new List<object>();
                 explicitChanges = response.ExplicitChanges ?? new List<EntityChange>();
+                
+                // Get structured response from SubmitFinalResponse tool call
+                var finalResponse = healthChatScenario.GetFinalResponse();
+                if (finalResponse != null)
+                {
+                    logger.LogInformation("Using structured response from SubmitFinalResponse tool call");
+                    parsedResponse = finalResponse;
+                    // Merge status updates from both sources
+                    parsedResponse.StatusUpdatesSent = statusUpdatesSent;
+                }
+                else
+                {
+                    // Fallback: Parse JSON from response.Message (should be valid JSON even if SubmitFinalResponse wasn't called)
+                    logger.LogWarning("SubmitFinalResponse was not called, attempting to parse JSON from response message");
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(response.Message))
+                        {
+                            parsedResponse = System.Text.Json.JsonSerializer.Deserialize<HealthAssistantResponse>(
+                                response.Message,
+                                new System.Text.Json.JsonSerializerOptions
+                                {
+                                    PropertyNameCaseInsensitive = true
+                                }) ?? new HealthAssistantResponse
+                                {
+                                    Message = response.Message,
+                                    Appointment = null,
+                                    SymptomChanges = null,
+                                    StatusUpdatesSent = statusUpdatesSent
+                                };
+                            
+                            // Ensure status updates are set
+                            parsedResponse.StatusUpdatesSent = statusUpdatesSent;
+                            logger.LogInformation("Successfully parsed JSON response from message");
+                        }
+                        else
+                        {
+                            logger.LogError("Response message is empty - this indicates a configuration error");
+                            parsedResponse = new HealthAssistantResponse
+                            {
+                                Message = "I apologize, but I encountered an error generating my response.",
+                                Appointment = null,
+                                SymptomChanges = null,
+                                StatusUpdatesSent = statusUpdatesSent
+                            };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Failed to parse JSON from response message, using fallback");
+                        parsedResponse = new HealthAssistantResponse
+                        {
+                            Message = response.Message ?? "I apologize, but I encountered an error generating my response.",
+                            Appointment = null,
+                            SymptomChanges = null,
+                            StatusUpdatesSent = statusUpdatesSent
+                        };
+                    }
+                }
             }
             else
             {
                 response = await scenario.ExecuteAsync(request, cancellationToken);
+                // This branch should not be used for HealthChatScenario
+                logger.LogWarning("Non-HealthChatScenario path used - this may indicate a configuration issue");
+                parsedResponse = new HealthAssistantResponse
+                {
+                    Message = response.Message ?? "I apologize, but I encountered an error generating my response.",
+                    Appointment = null,
+                    SymptomChanges = null,
+                    StatusUpdatesSent = new List<object>()
+                };
             }
-
-            // Parse JSON response
-            var parsedResponse = responseParser.Parse(response.Message);
-
-            // Store status updates for later persistence
-            parsedResponse.StatusUpdatesSent = statusUpdatesSent;
 
             return (parsedResponse, explicitChanges);
         }

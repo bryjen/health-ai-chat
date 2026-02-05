@@ -50,13 +50,11 @@ builder.Services.AddScoped<VectorStoreRepository>();
 // Health chat services
 builder.Services.AddScoped<VectorStoreService>();
 builder.Services.AddScoped<ConversationContextService>();
-builder.Services.AddScoped<ClientConnectionService>();
 builder.Services.AddScoped<SymptomTrackerPlugin>();
 builder.Services.AddScoped<AssessmentPlugin>();
 builder.Services.AddScoped<HealthChatScenario>();
 builder.Services.AddScoped<ResponseRouterService>();
 builder.Services.AddScoped<StatusInformationSerializer>();
-builder.Services.AddScoped<HealthResponseParser>();
 builder.Services.AddScoped<EntityChangeTracker>();
 builder.Services.AddScoped<HealthChatOrchestrator>();
 builder.Services.AddScoped<WebApi.Services.Graph.GraphDataService>();

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -26,7 +27,6 @@ public partial class HealthChatScenario(
     VectorStoreService vectorStoreService,
     IOptions<VectorStoreSettings> vectorStoreSettings,
     ConversationContextService contextService,
-    ClientConnectionService clientConnectionService,
     IServiceProvider serviceProvider,
     ILogger<HealthChatScenario> logger)
     : AiScenarioHandler<HealthChatScenarioRequest, HealthChatScenarioResponse>(kernel, logger)
@@ -95,10 +95,11 @@ You: [CALL GetActiveEpisodes()] → [CALL CreateAssessment(hypothesis=""viral in
   - reasoning: Explanation of your diagnosis
 - **The function automatically saves the assessment - you don't need to describe it in your response**
 
-**Step 4: Final response**
-- **IMPORTANT: Function calls happen FIRST, then JSON formatting**
-- After ALL function calls are complete (including CreateAssessment if requested), format your final response as JSON
-- The JSON ""message"" field should acknowledge what you did (e.g., ""I've created an assessment based on your symptoms"")
+**Step 4: Final response (MANDATORY)**
+- **CRITICAL: After ALL function calls are complete (including CreateAssessment if requested), you MUST call SubmitFinalResponse() as the very last step**
+- **SubmitFinalResponse is MANDATORY - you MUST call it exactly once at the end**
+- Pass your message, appointment details (if applicable), and symptom changes to SubmitFinalResponse
+- Do NOT format JSON manually - SubmitFinalResponse handles the structured output
 
 ## Phase Awareness
 
@@ -107,36 +108,23 @@ Track conversation phase:
 - ASSESSING: Enough info, forming/sharing assessment
 - RECOMMENDING: Assessment complete, discussing next steps
 
-## Response Format
+## Final Response (MANDATORY)
 
-CRITICAL: Function calls happen FIRST, then JSON formatting. Do NOT skip function calls to format JSON faster.
+CRITICAL: After completing ALL necessary function calls (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, etc.), you MUST call SubmitFinalResponse() as the very last step.
 
-After you have completed ALL necessary function calls (especially CreateAssessment if user requested it), format your final response as valid JSON in this EXACT format:
-{
-  ""message"": ""Your response message to the user - THIS FIELD IS REQUIRED"",
-  ""appointment"": {
-    ""needed"": true/false,
-    ""urgency"": ""Emergency"" | ""High"" | ""Medium"" | ""Low"" | ""None"",
-    ""symptoms"": [""symptom1"", ""symptom2""],
-    ""duration"": 30,
-    ""readyToBook"": true/false,
-    ""followUpNeeded"": true/false,
-    ""nextQuestions"": [""question1"", ""question2""],
-    ""preferredTime"": null,
-    ""emergencyAction"": ""Call 911 immediately"" (only for emergencies)
-  },
-  ""symptomChanges"": [
-    {""symptom"": ""headache"", ""action"": ""added""}
-  ]
-}
+**SubmitFinalResponse is MANDATORY - you MUST call it exactly once at the end of your response.**
 
-REQUIREMENTS:
-- The ""message"" field is REQUIRED and must be a string (not an object or array)
-- The ""message"" field must contain your natural language response to the user
-- Do NOT include other fields at the root level (like ""symptoms"" or ""questions"") - only ""message"", ""appointment"", and ""symptomChanges""
-- **CRITICAL ORDER: 1) Call functions FIRST (especially CreateAssessment if requested), 2) THEN format JSON response**
-- **If user asks for assessment, you MUST call CreateAssessment() BEFORE formatting your JSON response**
-- **Never skip function calls - they must happen before JSON formatting**";
+Call SubmitFinalResponse with:
+- message: Your natural language response to the user (REQUIRED)
+- appointment details: If an appointment is needed, provide urgency, symptoms, duration, etc.
+- symptomChanges: List of symptom changes (e.g., [{""symptom"": ""headache"", ""action"": ""added""}])
+
+**CRITICAL ORDER:**
+1. Call all necessary functions FIRST (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, etc.)
+2. THEN call SubmitFinalResponse() as the final step
+3. Do NOT format JSON manually - SubmitFinalResponse handles structured output
+
+**Never skip function calls - they must happen before SubmitFinalResponse**";
 
     private readonly VectorStoreSettings _vectorStoreSettings = vectorStoreSettings.Value;
 
@@ -163,7 +151,7 @@ REQUIREMENTS:
                 .Select(e => e.Symptom!.Name)
                 .Distinct()
                 .ToList();
-            
+
             if (symptomNames.Any())
             {
                 prompt += $"\n\n**Current Active Symptoms:** {string.Join(", ", symptomNames)}";
@@ -232,12 +220,12 @@ REQUIREMENTS:
             Logger.LogDebug("Context hydrated. ConversationId in context: {ConversationId}",
                 conversationContext.ConversationId);
 
-            // Set client connection for plugins to access
-            clientConnectionService.CurrentConnection = clientConnection;
-
             // Get plugins (they will use the scoped context from ConversationContextService)
             var symptomTrackerPlugin = serviceProvider.GetRequiredService<SymptomTrackerPlugin>();
+            symptomTrackerPlugin.SetConnection(clientConnection);
+
             var assessmentPlugin = serviceProvider.GetRequiredService<AssessmentPlugin>();
+            assessmentPlugin.SetConnection(clientConnection);
 
             // Create a kernel instance for this request with plugins
             var chatCompletionService = Kernel.GetRequiredService<IChatCompletionService>();
@@ -254,6 +242,9 @@ REQUIREMENTS:
             // Add plugins to kernel
             requestKernel.Plugins.AddFromObject(symptomTrackerPlugin, "SymptomTracker");
             requestKernel.Plugins.AddFromObject(assessmentPlugin, "Assessment");
+
+            // Add SubmitFinalResponse as a plugin function from this instance
+            requestKernel.Plugins.AddFromObject(this, "HealthChat");
 
             // Log available functions for debugging
             var availableFunctions = requestKernel.Plugins
@@ -279,7 +270,7 @@ REQUIREMENTS:
             // Build chat history with context-aware system prompt
             var chatHistory = new ChatHistory();
             var systemPrompt = BuildSystemPromptWithContext(conversationContext);
-            
+
             // TODO: might need to remove
             // If user is requesting assessment, add explicit reminder to system prompt
             var userMessageLower = input.Message.ToLowerInvariant();
@@ -289,7 +280,7 @@ REQUIREMENTS:
                 Logger.LogInformation("User message contains assessment keywords - adding explicit reminder to call CreateAssessment()");
                 systemPrompt += "\n\n*** USER IS REQUESTING AN ASSESSMENT - YOU MUST CALL CreateAssessment() FUNCTION IMMEDIATELY. DO NOT DESCRIBE IT - CALL IT NOW. ***";
             }
-            
+
             chatHistory.AddSystemMessage(systemPrompt);
 
             // Add context messages in chronological order
@@ -306,6 +297,9 @@ REQUIREMENTS:
 
             // Add current user message
             chatHistory.AddUserMessage(input.Message);
+
+            // Reset final response before processing
+            _finalResponse = null;
 
             // Get AI response using request kernel with plugins
             var (responseText, explicitChanges) = await GetChatCompletionWithKernelAsync(
@@ -324,6 +318,17 @@ REQUIREMENTS:
             }
             response.StatusUpdatesSent = statusUpdatesSent;
             response.ExplicitChanges = explicitChanges;
+
+            // Store the structured response in a way the orchestrator can access it
+            // We'll serialize it to JSON in the Message field, but also store the structured version
+            if (_finalResponse != null)
+            {
+                // Update status updates from structured response if available
+                if (_finalResponse.StatusUpdatesSent != null && _finalResponse.StatusUpdatesSent.Any())
+                {
+                    response.StatusUpdatesSent = _finalResponse.StatusUpdatesSent;
+                }
+            }
 
             Logger.LogInformation("[HEALTH_CHAT_SCENARIO] Returning response with {Count} status updates tracked", statusUpdatesSent.Count);
 
@@ -363,17 +368,25 @@ REQUIREMENTS:
     {
         var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
 
-        // Log available functions before calling
-        var availableFunctions = kernel.Plugins
-            .SelectMany(p => p.Select(f => $"{p.Name}.{f.Name}"))
-            .ToList();
-        Logger.LogInformation("Available kernel functions before chat completion: {Functions}",
-            string.Join(", ", availableFunctions));
+            // Log available functions before calling
+            var availableFunctions = kernel.Plugins
+                .SelectMany(p => p.Select(f => $"{p.Name}.{f.Name}"))
+                .ToList();
+            Logger.LogInformation("Available kernel functions before chat completion: {Functions}",
+                string.Join(", ", availableFunctions));
 
+            // Verify SubmitFinalResponse is registered
+            var submitFinalResponseRegistered = availableFunctions.Any(f => f.Contains("SubmitFinalResponse"));
+            Logger.LogInformation("SubmitFinalResponse registered: {Registered}", submitFinalResponseRegistered);
+
+        // Configure tool call behavior: allow other functions first, then require SubmitFinalResponse
         var executionSettings = new OpenAIPromptExecutionSettings
         {
             ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
         };
+
+        // After auto-invoke completes, we'll check if SubmitFinalResponse was called
+        // If not, we'll make a second call requiring it
 
         // Track explicit changes from tool execution
         var explicitChanges = new List<EntityChange>();
@@ -428,43 +441,137 @@ REQUIREMENTS:
                 return ("I apologize, but I couldn't generate a response.", explicitChanges);
             }
 
-            var finalResponse = assistantMessage.Content ?? string.Empty;
-
-            if (string.IsNullOrWhiteSpace(finalResponse))
+            // Check if SubmitFinalResponse was called (stored in _finalResponse)
+            if (_finalResponse != null)
             {
-                Logger.LogWarning("Assistant message has no content, checking chat history");
-                // Fallback: get last assistant message from chat history
-                var lastAssistantMessage = chatHistory
-                    .LastOrDefault(m => m.Role == AuthorRole.Assistant);
-
-                if (lastAssistantMessage != null && !string.IsNullOrWhiteSpace(lastAssistantMessage.Content))
+                Logger.LogInformation("SubmitFinalResponse was called, using structured output");
+                // Serialize the structured response to JSON for backward compatibility
+                var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
                 {
-                    finalResponse = lastAssistantMessage.Content;
-                }
-                else
-                {
-                    finalResponse = "I apologize, but I couldn't generate a response.";
-                }
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = false
+                });
+                return (jsonResponse, explicitChanges);
             }
 
-            // Post-process: Ensure response is valid JSON format
-            // If the response is not valid JSON, try to format it
-            finalResponse = await EnsureJsonFormatAsync(
-                finalResponse,
-                chatCompletionService,
-                chatHistory,
-                kernel,
-                cancellationToken);
+            // If SubmitFinalResponse wasn't called, try one more time with explicit instruction
+            Logger.LogWarning("SubmitFinalResponse was not called, making another attempt with explicit instruction");
 
-            // Validate that response has required "message" field
-            finalResponse = await ValidateAndFixMessageFieldAsync(
-                finalResponse,
-                chatCompletionService,
-                kernel,
-                cancellationToken);
+            // Build a new chat history for the retry that includes the assistant's response
+            var finalRequestHistory = new ChatHistory(chatHistory);
+            finalRequestHistory.AddAssistantMessage(assistantMessage.Content ?? string.Empty);
 
-            Logger.LogDebug("Final response generated (length: {Length})", finalResponse.Length);
-            return (finalResponse, explicitChanges);
+            // Add a very explicit system message and user message
+            finalRequestHistory.Insert(0, new ChatMessageContent(AuthorRole.System,
+                "CRITICAL INSTRUCTION: You MUST call SubmitFinalResponse function NOW. This is mandatory. Do not respond with text - call the function."));
+            finalRequestHistory.AddUserMessage("You must call SubmitFinalResponse function immediately with: 1) message parameter (your response to the user), 2) appointment details if applicable, 3) symptomChanges if any. This is required - call the function now.");
+
+            // Try again with auto-invoke
+            var retryExecutionSettings = new OpenAIPromptExecutionSettings
+            {
+                ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions
+            };
+
+            Logger.LogInformation("Making retry call to encourage SubmitFinalResponse");
+            var retryResponse = await chatCompletionService.GetChatMessageContentsAsync(
+                finalRequestHistory,
+                retryExecutionSettings,
+                kernel,
+                cancellationToken: cancellationToken);
+
+            // Log retry response for debugging
+            var retryMessages = retryResponse.Select((msg, idx) =>
+            {
+                var role = msg.Role.ToString();
+                var content = msg.Content ?? "";
+                var contentPreview = content.Length > 200 ? content.Substring(0, 200) + "..." : content;
+                return $"[{idx}] {role}: {contentPreview}";
+            }).ToList();
+            Logger.LogInformation("Retry response ({Count} messages): {Response}",
+                retryResponse.Count(), string.Join("\n", retryMessages));
+
+            // Check again if SubmitFinalResponse was called
+            if (_finalResponse != null)
+            {
+                Logger.LogInformation("SubmitFinalResponse was called in retry, using structured output");
+                var jsonResponse = JsonSerializer.Serialize(_finalResponse, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = false
+                });
+                return (jsonResponse, explicitChanges);
+            }
+
+            // Fallback: construct a response from the assistant message if SubmitFinalResponse still wasn't called
+            Logger.LogWarning("SubmitFinalResponse was not called even after retry. Constructing fallback response.");
+            var assistantContent = assistantMessage.Content ?? string.Empty;
+
+            // If we have content, construct a proper HealthAssistantResponse
+            if (!string.IsNullOrWhiteSpace(assistantContent))
+            {
+                // Try to extract JSON from the response if it exists
+                var extractedJson = ExtractJsonFromResponse(assistantContent);
+                if (IsValidJson(extractedJson))
+                {
+                    try
+                    {
+                        var parsedResponse = JsonSerializer.Deserialize<HealthAssistantResponse>(extractedJson, new JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+                        if (parsedResponse != null && !string.IsNullOrWhiteSpace(parsedResponse.Message))
+                        {
+                            Logger.LogInformation("Successfully parsed JSON from assistant message");
+                            var jsonResponse = JsonSerializer.Serialize(parsedResponse, new JsonSerializerOptions
+                            {
+                                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                                WriteIndented = false
+                            });
+                            return (jsonResponse, explicitChanges);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogWarning(ex, "Failed to parse JSON from assistant message");
+                    }
+                }
+
+                // Construct a basic response from the text
+                var fallbackStructuredResponse = new HealthAssistantResponse
+                {
+                    Message = assistantContent,
+                    Appointment = null,
+                    SymptomChanges = null,
+                    StatusUpdatesSent = new List<object>()
+                };
+
+                var fallbackJson = JsonSerializer.Serialize(fallbackStructuredResponse, new JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                    WriteIndented = false
+                });
+
+                Logger.LogInformation("Using fallback structured response constructed from assistant message");
+                return (fallbackJson, explicitChanges);
+            }
+
+            // Last resort fallback
+            Logger.LogWarning("No response content available, using error message");
+            var errorResponse = new HealthAssistantResponse
+            {
+                Message = "I apologize, but I encountered an error generating my response. Please try again.",
+                Appointment = null,
+                SymptomChanges = null,
+                StatusUpdatesSent = new List<object>()
+            };
+
+            var errorJson = JsonSerializer.Serialize(errorResponse, new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = false
+            });
+
+            return (errorJson, explicitChanges);
         }
         catch (Exception ex)
         {
@@ -555,222 +662,6 @@ REQUIREMENTS:
         return contextMessages;
     }
 
-    private async Task<string> EnsureJsonFormatAsync(
-        string response,
-        IChatCompletionService chatCompletionService,
-        ChatHistory chatHistory,
-        Kernel kernel,
-        CancellationToken cancellationToken)
-    {
-        // Check if response is already valid JSON
-        if (IsValidJson(response))
-        {
-            Logger.LogDebug("Response is already valid JSON, no formatting needed");
-            return response;
-        }
-
-        // Try to extract JSON from response (might be wrapped in markdown)
-        var extractedJson = ExtractJsonFromResponse(response);
-        if (IsValidJson(extractedJson))
-        {
-            Logger.LogDebug("Extracted valid JSON from response");
-            return extractedJson;
-        }
-
-        // If not valid JSON, ask AI to format it
-        Logger.LogDebug("Response is not valid JSON, requesting formatting");
-        try
-        {
-            var formattingHistory = new ChatHistory();
-            var schemaPrompt = @"You are a JSON formatter. Format the following response as valid JSON according to this EXACT schema:
-
-{
-  ""message"": ""string (REQUIRED - your response to the user)"",
-  ""appointment"": {
-    ""needed"": boolean,
-    ""urgency"": ""Emergency"" | ""High"" | ""Medium"" | ""Low"" | ""None"",
-    ""symptoms"": [""string""],
-    ""duration"": number,
-    ""readyToBook"": boolean,
-    ""followUpNeeded"": boolean,
-    ""nextQuestions"": [""string""],
-    ""preferredTime"": null,
-    ""emergencyAction"": ""string""
-  },
-  ""symptomChanges"": [
-    {""symptom"": ""string"", ""action"": ""string""}
-  ]
-}
-
-CRITICAL: The ""message"" field is REQUIRED and must be a string. If the response contains symptoms or questions but no message field, create an appropriate message string that includes that information.";
-            formattingHistory.AddSystemMessage(schemaPrompt);
-            formattingHistory.AddUserMessage($"Format this response as valid JSON with a REQUIRED 'message' field:\n\n{response}");
-
-            // Log what we're sending to the model for formatting
-            var formattingHistorySummary = SerializeChatHistoryForLogging(formattingHistory);
-            Logger.LogInformation("[MODEL_CALL] === FORMATTING CALL START ===\nChat History ({Count} messages):\n{History}\nSettings: No tool calling",
-                formattingHistory.Count, formattingHistorySummary);
-
-            var formattingStartTime = DateTime.UtcNow;
-
-            // Create formatting settings without tool calling
-            // Use default behavior (no tools) for formatting pass
-            var formattingSettings = new OpenAIPromptExecutionSettings();
-
-            var formattedResponse = await chatCompletionService.GetChatMessageContentsAsync(
-                formattingHistory,
-                formattingSettings,
-                kernel,
-                cancellationToken: cancellationToken);
-
-            var formattingDuration = DateTime.UtcNow - formattingStartTime;
-            var formattedResponseMessages = formattedResponse.Select((msg, idx) =>
-            {
-                var role = msg.Role.ToString();
-                var content = msg.Content ?? "";
-                var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
-                return $"[{idx}] {role}: {contentPreview}";
-            }).ToList();
-            Logger.LogInformation("[MODEL_CALL] === FORMATTING CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
-                formattingDuration.TotalMilliseconds, formattedResponse.Count(), string.Join("\n", formattedResponseMessages));
-
-            var formattedMessage = formattedResponse.FirstOrDefault()?.Content ?? response;
-
-            // Try to extract JSON from formatted response
-            var formattedJson = ExtractJsonFromResponse(formattedMessage);
-            if (IsValidJson(formattedJson))
-            {
-                Logger.LogDebug("Successfully formatted response as JSON");
-                return formattedJson;
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Error formatting response as JSON, returning original");
-        }
-
-        // Fallback: return original response
-        Logger.LogWarning("Could not format response as JSON, returning original");
-        return response;
-    }
-
-    private async Task<string> ValidateAndFixMessageFieldAsync(
-        string response,
-        IChatCompletionService chatCompletionService,
-        Kernel kernel,
-        CancellationToken cancellationToken)
-    {
-        // Check if response is valid JSON and has "message" field
-        try
-        {
-            var jsonText = ExtractJsonFromResponse(response);
-            if (!IsValidJson(jsonText))
-            {
-                return response; // Not valid JSON, return as-is (will be handled by parser)
-            }
-
-            using var doc = JsonDocument.Parse(jsonText);
-            var root = doc.RootElement;
-
-            // Check for message field (case-insensitive)
-            bool hasMessageField = false;
-            foreach (var prop in root.EnumerateObject())
-            {
-                if (string.Equals(prop.Name, "message", StringComparison.OrdinalIgnoreCase))
-                {
-                    // Check if it's a string (not object/array)
-                    if (prop.Value.ValueKind == JsonValueKind.String)
-                    {
-                        var messageValue = prop.Value.GetString();
-                        if (!string.IsNullOrWhiteSpace(messageValue))
-                        {
-                            hasMessageField = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if (hasMessageField)
-            {
-                Logger.LogDebug("Response has valid message field");
-                return response;
-            }
-
-            // Missing message field - request reformatting with stronger prompt
-            Logger.LogWarning("Response is missing required 'message' field, requesting reformatting");
-            var validationHistory = new ChatHistory();
-            var validationPrompt = @"You are a JSON formatter. The following JSON response is missing the REQUIRED ""message"" field.
-
-You MUST add a ""message"" field that is a STRING (not an object or array) containing a natural language response to the user.
-
-If the JSON contains symptoms, questions, or other data, convert that information into a readable message string in the ""message"" field.
-
-The response MUST have this structure:
-{
-  ""message"": ""string (REQUIRED - your response to the user)"",
-  ...other fields...
-}
-
-Return ONLY the corrected JSON, nothing else.";
-            validationHistory.AddSystemMessage(validationPrompt);
-            validationHistory.AddUserMessage($"Add the required 'message' field to this JSON:\n\n{response}");
-
-            // Log what we're sending to the model for validation
-            var validationHistorySummary = SerializeChatHistoryForLogging(validationHistory);
-            Logger.LogInformation("[MODEL_CALL] === VALIDATION CALL START ===\nChat History ({Count} messages):\n{History}\nSettings: No tool calling",
-                validationHistory.Count, validationHistorySummary);
-
-            var validationStartTime = DateTime.UtcNow;
-
-            var validationSettings = new OpenAIPromptExecutionSettings();
-            var validatedResponse = await chatCompletionService.GetChatMessageContentsAsync(
-                validationHistory,
-                validationSettings,
-                kernel,
-                cancellationToken: cancellationToken);
-
-            var validationDuration = DateTime.UtcNow - validationStartTime;
-            var validatedResponseMessages = validatedResponse.Select((msg, idx) =>
-            {
-                var role = msg.Role.ToString();
-                var content = msg.Content ?? "";
-                var contentPreview = content.Length > 500 ? content.Substring(0, 500) + "..." : content;
-                return $"[{idx}] {role}: {contentPreview}";
-            }).ToList();
-            Logger.LogInformation("[MODEL_CALL] === VALIDATION CALL END (Duration: {Duration}ms) ===\nResponse ({Count} messages):\n{Response}",
-                validationDuration.TotalMilliseconds, validatedResponse.Count(), string.Join("\n", validatedResponseMessages));
-
-            var validatedMessage = validatedResponse.FirstOrDefault()?.Content ?? response;
-            var validatedJson = ExtractJsonFromResponse(validatedMessage);
-
-            if (IsValidJson(validatedJson))
-            {
-                // Verify it now has message field
-                using var validatedDoc = JsonDocument.Parse(validatedJson);
-                var validatedRoot = validatedDoc.RootElement;
-                foreach (var prop in validatedRoot.EnumerateObject())
-                {
-                    if (string.Equals(prop.Name, "message", StringComparison.OrdinalIgnoreCase) &&
-                        prop.Value.ValueKind == JsonValueKind.String &&
-                        !string.IsNullOrWhiteSpace(prop.Value.GetString()))
-                    {
-                        Logger.LogDebug("Successfully added message field to response");
-                        return validatedJson;
-                    }
-                }
-            }
-
-            Logger.LogWarning("Could not add message field, returning original response");
-            return response;
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Error validating message field, returning original response");
-            return response;
-        }
-    }
-
     private static bool IsValidJson(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -827,6 +718,82 @@ Return ONLY the corrected JSON, nothing else.";
         }
 
         return json;
+    }
+
+    /// <summary>
+    /// Stores the final response from SubmitFinalResponse tool call for retrieval by orchestrator.
+    /// </summary>
+    private HealthAssistantResponse? _finalResponse;
+
+    /// <summary>
+    /// Gets the final structured response if SubmitFinalResponse was called.
+    /// </summary>
+    public HealthAssistantResponse? GetFinalResponse()
+    {
+        return _finalResponse;
+    }
+
+    /// <summary>
+    /// MANDATORY FINAL STEP: You MUST call this function as the very last step after completing all other function calls.
+    /// This function submits your final structured response to the user. You MUST call this function exactly once at the end.
+    /// </summary>
+    [KernelFunction]
+    [Description("SubmitFinalResponse: MANDATORY FINAL STEP. You MUST call this function as the very last step after completing all other function calls (CreateSymptomWithEpisode, UpdateEpisode, CreateAssessment, etc.). This submits your final structured response. Call this exactly once at the end with your message, appointment details, and symptom changes.")]
+    public string SubmitFinalResponse(
+        [Description("REQUIRED: Your natural language response message to the user")] string message,
+        [Description("OPTIONAL: Whether an appointment is needed")] bool? appointmentNeeded = null,
+        [Description("OPTIONAL: Appointment urgency - 'Emergency', 'High', 'Medium', 'Low', or 'None'")] string? appointmentUrgency = null,
+        [Description("OPTIONAL: List of symptoms related to the appointment")] List<string>? appointmentSymptoms = null,
+        [Description("OPTIONAL: Appointment duration in minutes")] int? appointmentDuration = null,
+        [Description("OPTIONAL: Whether the appointment is ready to book")] bool? appointmentReadyToBook = null,
+        [Description("OPTIONAL: Whether follow-up is needed")] bool? appointmentFollowUpNeeded = null,
+        [Description("OPTIONAL: List of next questions to ask")] List<string>? appointmentNextQuestions = null,
+        [Description("OPTIONAL: Preferred appointment time (ISO 8601 format)")] string? appointmentPreferredTime = null,
+        [Description("OPTIONAL: Emergency action instructions (only for emergencies)")] string? appointmentEmergencyAction = null,
+        [Description("OPTIONAL: List of symptom changes in format [{\"symptom\": \"headache\", \"action\": \"added\"}]")] List<SymptomChange>? symptomChanges = null)
+    {
+        Logger.LogInformation("[SUBMIT_FINAL_RESPONSE] *** FUNCTION CALLED *** with message length: {Length}, appointmentNeeded: {AppointmentNeeded}, symptomChanges count: {SymptomChangesCount}",
+            message?.Length ?? 0, appointmentNeeded, symptomChanges?.Count ?? 0);
+
+        // Build AppointmentData if any appointment fields are provided
+        AppointmentData? appointment = null;
+        if (appointmentNeeded.HasValue ||
+            !string.IsNullOrWhiteSpace(appointmentUrgency) ||
+            (appointmentSymptoms != null && appointmentSymptoms.Any()) ||
+            appointmentDuration.HasValue ||
+            appointmentReadyToBook.HasValue ||
+            appointmentFollowUpNeeded.HasValue ||
+            (appointmentNextQuestions != null && appointmentNextQuestions.Any()) ||
+            !string.IsNullOrWhiteSpace(appointmentPreferredTime) ||
+            !string.IsNullOrWhiteSpace(appointmentEmergencyAction))
+        {
+            appointment = new AppointmentData
+            {
+                Needed = appointmentNeeded ?? false,
+                Urgency = appointmentUrgency ?? "None",
+                Symptoms = appointmentSymptoms ?? new List<string>(),
+                Duration = appointmentDuration,
+                ReadyToBook = appointmentReadyToBook ?? false,
+                FollowUpNeeded = appointmentFollowUpNeeded ?? false,
+                NextQuestions = appointmentNextQuestions ?? new List<string>(),
+                PreferredTime = !string.IsNullOrWhiteSpace(appointmentPreferredTime) && DateTime.TryParse(appointmentPreferredTime, out var dt) ? dt : null,
+                EmergencyAction = appointmentEmergencyAction
+            };
+        }
+
+        // Store the final response for retrieval by orchestrator
+        _finalResponse = new HealthAssistantResponse
+        {
+            Message = message ?? "I apologize, but I couldn't generate a response.",
+            Appointment = appointment,
+            SymptomChanges = symptomChanges,
+            StatusUpdatesSent = new List<object>()
+        };
+
+        Logger.LogInformation("[SUBMIT_FINAL_RESPONSE] Stored final response with message: {Message}",
+            _finalResponse.Message.Substring(0, Math.Min(100, _finalResponse.Message.Length)));
+
+        return "Final response submitted successfully.";
     }
 
     protected override HealthChatScenarioResponse CreateResponse(string responseText)
