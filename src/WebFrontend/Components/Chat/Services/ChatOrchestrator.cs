@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using WebFrontend.Components.Chat.Models;
+using WebFrontend.Components.Chat.Services.ChatService;
 using WebFrontend.Components.Chat.Services.StreamResponse;
 
 namespace WebFrontend.Components.Chat.Services;

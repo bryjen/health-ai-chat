@@ -1,8 +1,8 @@
 using System.Runtime.CompilerServices;
 
-namespace WebFrontend.Components.Chat.Services;
+namespace WebFrontend.Components.Chat.Services.ChatService;
 
-public class ChatService : IChatService
+public class TestChatService : IChatService
 {
     public async IAsyncEnumerable<string> RunStreamingAsync(
         string _,

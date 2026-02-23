@@ -1,4 +1,4 @@
-namespace WebFrontend.Components.Chat.Services;
+namespace WebFrontend.Components.Chat.Services.ChatService;
 
 public interface IChatService
 {
