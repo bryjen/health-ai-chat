@@ -2,8 +2,16 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Microsoft.JSInterop;
+using ShadcnBlazor.Components.Dialog.Services;
+using ShadcnBlazor.Components.Popover.Models;
+using ShadcnBlazor.Components.Popover.Services;
+using ShadcnBlazor.Components.Shared.Services;
+using ShadcnBlazor.Components.Shared.Services.Interop;
+using ShadcnBlazor.Components.Sheet.Services;
+using TailwindMerge.Extensions;
 using WebApi.ApiWrapper.Services;
 using WebFrontend;
+using WebFrontend.Components.Chat.Services;
 using WebFrontend.Services;
 using WebFrontend.Services.Auth;
 using WebFrontend.Services.Auth.OAuth;
@@ -17,6 +25,46 @@ using SymptomsApiClient = WebApi.ApiWrapper.Services.SymptomsApiClient;
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
+
+builder.Services.AddTailwindMerge();
+builder.Services.AddAiChat();
+builder.Services.AddOptions();
+builder.Services.Configure<PopoverOptions>(_ => { });
+builder.Services.AddScoped<IPopoverRegistry, PopoverRegistry>();
+builder.Services.AddScoped<IPopoverService, PopoverService>();
+
+builder.Services.AddScoped<IDialogService, DialogService>();
+builder.Services.AddScoped<IDialogJsService, DialogJsService>();
+builder.Services.AddScoped<ScrollLockService>();
+
+builder.Services.AddScoped(sp => new PopoverInterop(
+    sp.GetRequiredService<IJSRuntime>(),
+    PopoverInterop.DefaultModulePaths));
+
+builder.Services.AddScoped(sp => new FocusScopeInterop(
+    sp.GetRequiredService<IJSRuntime>(),
+    FocusScopeInterop.DefaultModulePaths));
+builder.Services.AddScoped<IFocusScopeService, FocusScopeService>();
+
+builder.Services.AddScoped(sp => new KeyInterceptorInterop(
+    sp.GetRequiredService<IJSRuntime>(),
+    KeyInterceptorInterop.DefaultModulePaths));
+builder.Services.AddScoped<IKeyInterceptorService, KeyInterceptorService>();
+
+builder.Services.AddScoped(sp => new ScrollLockInterop(
+    sp.GetRequiredService<IJSRuntime>(),
+    ScrollLockInterop.DefaultModulePaths));
+
+builder.Services.AddScoped(sp => new DialogInterop(
+    sp.GetRequiredService<IJSRuntime>(),
+    DialogInterop.DefaultModulePaths));
+
+builder.Services.AddScoped(sp => new SheetInterop(
+    sp.GetRequiredService<IJSRuntime>(),
+    SheetInterop.DefaultModulePaths));
+builder.Services.AddScoped<ISheetJsService, SheetJsService>();
+builder.Services.AddScoped<ISheetService, SheetService>();
+
 
 // Register HttpClient for general use
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
@@ -147,18 +195,6 @@ builder.Services.AddScoped<ChatHubClient>(sp =>
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
     return new ChatHubClient(tokenProvider);
 });
-
-// Register dropdown service
-builder.Services.AddScoped<DropdownService>();
-
-// Register dialog service as scoped
-builder.Services.AddScoped<DialogService>();
-
-// Register scroll lock service (ref-count for Dialog, Dropdown, etc.)
-builder.Services.AddScoped<ScrollLockService>();
-
-// Register toast service as singleton so it persists across components
-builder.Services.AddSingleton<ToastService>();
 
 // Register location service for country/state/city selector
 builder.Services.AddScoped<LocationService>();

@@ -1,15 +1,13 @@
+@using WebFrontend.Components.Layout
 @inherits LayoutComponentBase
 
-<div class="relative flex flex-col md:flex-row min-h-screen bg-background">
-    <div class="bg-card border-r border-border md:w-[17.5%] md:h-screen md:sticky md:top-0">
+<div class="flex h-screen overflow-hidden bg-background">
+    <nav class="sticky top-0 h-screen w-64 overflow-y-auto bg-card shrink-0">
         <NavMenu/>
-    </div>
-
-    <main class="flex-1 flex flex-col">
-        <article class="flex-1 overflow-y-hidden px-4 md:px-8">
+    </nav>
+    <main class="flex-1 h-screen bg-card p-2 overflow-y-auto">
+        <div class="bg-background h-full rounded-4xl overflow-x-hidden">
             @Body
-        </article>
+        </div>
     </main>
-
-    <DropdownPortal />
 </div>

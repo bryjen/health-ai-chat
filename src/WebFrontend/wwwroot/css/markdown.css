@@ -1,0 +1,461 @@
+.markdown-content {
+    color: hsl(var(--foreground));
+    line-height: 1.65;
+    font-size: 0.9rem;
+}
+
+.markdown-content > :first-child {
+    margin-top: 0;
+}
+
+.markdown-content > :last-child {
+    margin-bottom: 0;
+}
+
+.markdown-content p {
+    margin: 0.75rem 0;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+    margin: 1.2rem 0 0.5rem;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.markdown-content h1 { font-size: 1.25rem; }
+.markdown-content h2 { font-size: 1.15rem; }
+.markdown-content h3 { font-size: 1.05rem; }
+.markdown-content h4 { font-size: 1rem; }
+
+.markdown-content ul,
+.markdown-content ol {
+    margin: 0.75rem 0 0.75rem 1.25rem;
+    padding-left: 1.1rem;
+    list-style-position: outside;
+}
+
+.markdown-content ul {
+    list-style-type: disc;
+}
+
+.markdown-content ol {
+    list-style-type: decimal;
+}
+
+.markdown-content li {
+    margin: 0.25rem 0;
+}
+
+.markdown-content li::marker {
+    color: hsl(var(--muted-foreground));
+}
+
+.markdown-content blockquote {
+    border-left: 2px solid hsl(var(--border));
+    padding-left: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    margin: 0.75rem 0;
+}
+
+.markdown-content code {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85em;
+    background: hsl(var(--muted));
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.35rem;
+    border: 1px solid hsl(var(--border));
+}
+
+.markdown-content pre {
+    background: hsl(var(--chat-sidebar)) !important;
+    border: 1px solid hsl(var(--chat-border));
+    padding: 0.95rem 1.1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 0.85rem 0;
+    width: 100%;
+    max-width: 100%;
+    display: block;
+    box-sizing: border-box;
+}
+
+.markdown-content pre code {
+    background: transparent !important;
+    border: 0;
+    padding: 0;
+    font-size: 0.85rem;
+    color: hsl(var(--foreground));
+    display: block;
+    white-space: pre;
+}
+
+.markdown-content pre code.hljs {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+/* Docs codeblock - VS Code Dark+ theme. JetBrains Mono ONLY on the code itself. */
+.docs-codeblock {
+    background: var(--card) !important;
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+}
+/* Solo: standalone, full rounded corners, no border */
+.docs-codeblock--solo {
+    border-radius: var(--radius-lg);
+}
+/* Embedded: bottom rounded only (top border from parent context) */
+.docs-codeblock--embedded {
+    border-bottom-left-radius: var(--radius-lg);
+    border-bottom-right-radius: var(--radius-lg);
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+.docs-codeblock pre {
+    background: transparent !important;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.docs-codeblock pre code {
+    background: transparent !important;
+    color: #d4d4d4;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 400;
+    white-space: pre;
+}
+/* Override github-dark.min.css padding - p-4 equivalent (1rem). Scoped to docs-codeblock only. */
+.docs-codeblock pre code.hljs {
+    background: transparent !important;
+    padding: 1rem !important;
+}
+.docs-codeblock-linenos div {
+    min-height: 1.65em;
+}
+
+/* Code block tabs - file selector when multiple files */
+.docs-codeblock-tabs button {
+    cursor: pointer;
+    background: transparent;
+}
+
+/* Hide scrollbars on code block - keep overflow for wide content */
+.docs-codeblock-wrapper,
+.docs-codeblock,
+.docs-codeblock pre,
+.docs-codeblock-tabs {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.docs-codeblock-wrapper::-webkit-scrollbar,
+.docs-codeblock::-webkit-scrollbar,
+.docs-codeblock pre::-webkit-scrollbar,
+.docs-codeblock-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+/* Component preview code block accordion - matches AccordionContent animation */
+.docs-codeblock-accordion {
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 300ms ease-in-out, opacity 300ms ease-in-out;
+}
+.docs-codeblock-accordion-expanded {
+    max-height: 2000px;
+    opacity: 1;
+    transition: max-height 300ms ease-in-out, opacity 300ms ease-in-out;
+}
+.docs-codeblock-accordion-inner {
+    overflow: hidden;
+}
+
+/* VS Code Dark+ color scheme for docs codeblock */
+.docs-codeblock .hljs {
+    color: #d4d4d4;
+    background: transparent !important;
+}
+.docs-codeblock .hljs-keyword,
+.docs-codeblock .hljs-selector-tag,
+.docs-codeblock .hljs-addition {
+    color: #c586c0;
+}
+.docs-codeblock .hljs-string,
+.docs-codeblock .hljs-template-variable,
+.docs-codeblock .hljs-section,
+.docs-codeblock .hljs-link,
+.docs-codeblock .hljs-meta .hljs-meta-string {
+    color: #ce9178;
+}
+.docs-codeblock .hljs-title,
+.docs-codeblock .hljs-title.class_,
+.docs-codeblock .hljs-title.class_.inherited__,
+.docs-codeblock .hljs-title.function_,
+.docs-codeblock .hljs-title.function_.invoke__ {
+    color: #dcdcaa;
+}
+.docs-codeblock .hljs-built_in,
+.docs-codeblock .hljs-variable,
+.docs-codeblock .hljs-variable.language_,
+.docs-codeblock .hljs-template-tag,
+.docs-codeblock .hljs-params {
+    color: #9cdcfe;
+}
+.docs-codeblock .hljs-type,
+.docs-codeblock .hljs-attribute {
+    color: #4ec9b0;
+}
+.docs-codeblock .hljs-tag,
+.docs-codeblock .hljs-name,
+.docs-codeblock .hljs-regexp,
+.docs-codeblock .hljs-meta,
+.docs-codeblock .hljs-meta .hljs-keyword {
+    color: #569cd6;
+}
+.docs-codeblock .hljs-attr {
+    color: #9cdcfe;
+}
+.docs-codeblock .hljs-number,
+.docs-codeblock .hljs-literal,
+.docs-codeblock .hljs-symbol {
+    color: #b5cea8;
+}
+.docs-codeblock .hljs-comment,
+.docs-codeblock .hljs-quote,
+.docs-codeblock .hljs-doctag {
+    color: #6a9955;
+}
+.docs-codeblock .hljs-operator,
+.docs-codeblock .hljs-punctuation,
+.docs-codeblock .hljs-subst {
+    color: #d4d4d4;
+}
+
+/* CommandBlock toggle group - structural only, does not override button variants */
+.command-block-toggle-group [data-slot="button"] {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    height: 100%;
+}
+.command-block-toggle-group [data-slot="button"]:not(:first-child) {
+    border-left: 1px solid hsl(var(--input) / 0.7);
+}
+.command-block-toggle-group [data-slot="button"]:first-child {
+    border-top-left-radius: 0.25rem;
+    border-bottom-left-radius: 0.25rem;
+}
+.command-block-toggle-group [data-slot="button"]:last-child {
+    border-top-right-radius: 0.25rem;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.markdown-content hr {
+    border: 0;
+    border-top: 1px solid hsl(var(--border));
+    margin: 1rem 0;
+}
+
+.markdown-content a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.markdown-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+    font-size: 0.9rem;
+}
+
+.markdown-content th,
+.markdown-content td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.45rem 0.6rem;
+    text-align: left;
+}
+
+.markdown-content th {
+    background: hsl(var(--muted));
+    font-weight: 600;
+}
+
+/* Playground CodeMirror 6 – match docs-codeblock (VS Code Dark+ look, JetBrains Mono, var(--card)) */
+.docs-codeblock-codemirror {
+    background: var(--card);
+    border-radius: var(--radius-lg);
+    border: 1px solid hsl(var(--border));
+}
+.docs-codeblock-codemirror .cm-editor {
+    background: var(--card) !important;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    border-radius: var(--radius-lg);
+}
+.docs-codeblock-codemirror .cm-scroller {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.75rem;
+    line-height: 1.65;
+}
+.docs-codeblock-codemirror .cm-content {
+    color: #d4d4d4;
+    caret-color: #d4d4d4;
+}
+.docs-codeblock-codemirror .cm-gutters {
+    background: color-mix(in oklab, var(--card) 92%, black 8%) !important;
+    border-right: 1px solid hsl(var(--border));
+    color: hsl(var(--muted-foreground) / 0.5);`n}
+.docs-codeblock-codemirror .cm-activeLineGutter {
+    background: color-mix(in oklab, var(--card) 85%, black 15%);
+    color: hsl(var(--muted-foreground));
+}
+.docs-codeblock-codemirror .cm-activeLine {
+    background: color-mix(in oklab, var(--card) 88%, white 12%);
+}
+.docs-codeblock-codemirror .cm-selectionMatch,
+.docs-codeblock-codemirror .cm-selectionBackground {
+    background: hsl(var(--primary) / 0.25);
+}
+.docs-codeblock-codemirror .cm-cursor {
+    border-left-color: #d4d4d4;
+}
+/* Syntax highlighting: identical to .docs-codeblock (VS Code Dark+). cm- and cmt- (CodeMirror classHighlightStyle). */
+.docs-codeblock-codemirror .cm-content,
+.docs-codeblock-codemirror .cm-line { color: #d4d4d4; }
+.docs-codeblock-codemirror .cm-content { caret-color: #d4d4d4; }
+/* .hljs-keyword, .hljs-selector-tag → #c586c0 */
+.docs-codeblock-codemirror .cm-keyword,
+.docs-codeblock-codemirror .cmt-keyword { color: #c586c0 !important; }
+/* .hljs-string, .hljs-link, etc. → #ce9178 */
+.docs-codeblock-codemirror .cm-string,
+.docs-codeblock-codemirror .cmt-string,
+.docs-codeblock-codemirror .cmt-string2,
+.docs-codeblock-codemirror .cmt-link,
+.docs-codeblock-codemirror .cmt-url,
+.docs-codeblock-codemirror .cmt-deleted { color: #ce9178 !important; }
+/* .hljs-title, .hljs-title.class_, .hljs-title.function_ → #dcdcaa */
+.docs-codeblock-codemirror .cm-def,
+.docs-codeblock-codemirror .cm-definition,
+.docs-codeblock-codemirror .cmt-className,
+.docs-codeblock-codemirror .cmt-labelName,
+.docs-codeblock-codemirror .cmt-heading { color: #dcdcaa !important; }
+.docs-codeblock-codemirror .cmt-heading { font-weight: bold; }
+/* .hljs-built_in, .hljs-variable, .hljs-params, .hljs-attr → #9cdcfe */
+.docs-codeblock-codemirror .cm-property,
+.docs-codeblock-codemirror .cm-variableName,
+.docs-codeblock-codemirror .cm-attributeName,
+.docs-codeblock-codemirror .cmt-variableName,
+.docs-codeblock-codemirror .cmt-propertyName,
+.docs-codeblock-codemirror .cmt-variableName2 { color: #9cdcfe !important; }
+/* .hljs-type, .hljs-attribute → #4ec9b0 */
+.docs-codeblock-codemirror .cm-typeName,
+.docs-codeblock-codemirror .cmt-typeName,
+.docs-codeblock-codemirror .cmt-namespace { color: #4ec9b0 !important; }
+/* .hljs-tag, .hljs-name, .hljs-regexp, .hljs-meta → #569cd6 */
+.docs-codeblock-codemirror .cm-tag,
+.docs-codeblock-codemirror .cm-meta,
+.docs-codeblock-codemirror .cmt-meta,
+.docs-codeblock-codemirror .cmt-macroName { color: #569cd6 !important; }
+/* .hljs-number, .hljs-literal, .hljs-symbol → #b5cea8 */
+.docs-codeblock-codemirror .cm-number,
+.docs-codeblock-codemirror .cm-unit,
+.docs-codeblock-codemirror .cm-color,
+.docs-codeblock-codemirror .cmt-number,
+.docs-codeblock-codemirror .cmt-atom,
+.docs-codeblock-codemirror .cmt-literal,
+.docs-codeblock-codemirror .cmt-bool,
+.docs-codeblock-codemirror .cmt-inserted { color: #b5cea8 !important; }
+/* .hljs-comment, .hljs-quote, .hljs-doctag → #6a9955 */
+.docs-codeblock-codemirror .cm-comment,
+.docs-codeblock-codemirror .cmt-comment { color: #6a9955 !important; }
+/* .hljs-operator, .hljs-punctuation, .hljs-subst → #d4d4d4 */
+.docs-codeblock-codemirror .cm-operator,
+.docs-codeblock-codemirror .cm-punctuation,
+.docs-codeblock-codemirror .cmt-operator,
+.docs-codeblock-codemirror .cmt-punctuation,
+.docs-codeblock-codemirror .cmt-strong,
+.docs-codeblock-codemirror .cmt-emphasis { color: #d4d4d4 !important; }
+.docs-codeblock-codemirror .cmt-strong { font-weight: bold; }
+.docs-codeblock-codemirror .cmt-emphasis { font-style: italic; }
+.docs-codeblock-codemirror .cmt-invalid { color: #f44747 !important; }
+/* Scrollbar – subtle like docs codeblock */
+.docs-codeblock-codemirror .cm-scroller::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+.docs-codeblock-codemirror .cm-scroller::-webkit-scrollbar-track {
+    background: transparent;
+}
+.docs-codeblock-codemirror .cm-scroller::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 4px;
+}
+.docs-codeblock-codemirror .cm-scroller::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* CodeMirror docs-block hard overrides */
+.docs-codeblock-codemirror {
+    box-shadow: var(--shadow-xs);
+}
+
+.docs-codeblock-codemirror .cm-editor {
+    border-radius: 0;
+}
+
+.docs-codeblock-codemirror .cm-scroller {
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+}
+
+.docs-codeblock-codemirror .cm-activeLine {
+    background: color-mix(in oklab, var(--card) 94%, white 6%);
+}
+
+.docs-codeblock-codemirror .cm-selectionMatch,
+.docs-codeblock-codemirror .cm-selectionBackground {
+    background: hsl(var(--primary) / 0.2);
+}
+
+/* Hide CodeMirror scrollbar while preserving scrolling */
+.docs-codeblock-codemirror .cm-scroller {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.docs-codeblock-codemirror .cm-scroller::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+
+
+
+/* Customize page: CodeMirror color preview rail */
+.docs-codeblock-codemirror-with-rail {
+    position: relative;
+    display: grid;
+    grid-template-columns: 26px 1fr;
+}
+
+.docs-codeblock-codemirror-rail {
+    position: relative;
+    background: color-mix(in oklab, var(--card) 94%, black 6%);
+    border-right: 1px solid hsl(var(--border));
+}
+
+.docs-codeblock-codemirror-swatch {
+    position: absolute;
+    left: 5px;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1px solid hsl(var(--border));
+    box-shadow: inset 0 0 0 1px hsl(var(--background) / 0.35);
+    pointer-events: none;
+}
+
+.docs-codeblock-codemirror-editor {
+    min-width: 0;
+}

@@ -1,0 +1,29 @@
+@inherits ShadcnComponentBase
+@using WebFrontend.Components.Chat.Components.MessageComponents
+@using WebFrontend.Components.Chat.Models
+
+<div class="flex flex-col gap-2">
+    @for (var i = 0; i < Message.Components.Count; i++)
+    {
+        var component = Message.Components[i];
+        var isLast = i == Message.Components.Count - 1;
+        @switch (component)
+        {
+            case ThinkingMessageComponent thinking:
+                <ThinkingMessageComponentView Component="@thinking" IsLast="@isLast" />
+                break;
+            case WebSearchMessageComponent webSearch:
+                <WebSearchMessageComponentView Component="@webSearch" AccordionExpanded="false" />
+                break;
+            case TextMessageComponent text:
+                <TextMessageComponentView Component="@text" />
+                break;
+        }
+    }
+</div>
+
+@code
+{
+    [Parameter]
+    public required AiChatMessage Message { get; set; }
+}

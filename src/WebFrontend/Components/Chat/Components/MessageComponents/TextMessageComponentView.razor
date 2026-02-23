@@ -1,0 +1,33 @@
+@inherits ShadcnComponentBase
+@using Markdig
+@using WebFrontend.Components.Chat.Models
+
+<div class="markdown-content">
+    @((MarkupString)_html)
+</div>
+
+@code
+{
+    [Parameter]
+    public required TextMessageComponent Component { get; set; }
+
+    [Inject]
+    private IJSRuntime JSRuntime { get; set; } = null!;
+
+    private string _html = string.Empty;
+    private string _lastContent = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        _html = Markdown.ToHtml(Component.Content ?? string.Empty);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Component.Content == _lastContent)
+            return;
+
+        _lastContent = Component.Content ?? string.Empty;
+        await JSRuntime.InvokeVoidAsync("shadcnMarkdownHighlight.highlightAll");
+    }
+}

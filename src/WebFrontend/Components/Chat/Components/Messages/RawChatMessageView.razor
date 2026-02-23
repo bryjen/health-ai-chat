@@ -1,0 +1,73 @@
+﻿@using WebFrontend.Components.Chat.Models
+
+@foreach(var rawChatMessage in _rawChatMessages)
+{
+    <div class="flex flex-col gap-1 p-2 border-2 border-border mb-8">
+        <div class="text-xs font-medium text-foreground/80">
+            @(rawChatMessage.Role) • @(string.IsNullOrEmpty(rawChatMessage.Role) ? "" : $"{rawChatMessage.Type}")
+        </div>
+        <div class="text-sm font-mono text-foreground whitespace-pre-wrap">@rawChatMessage.AsString</div>
+    </div>
+}
+
+@code {
+    private record RawChatMessage(string Role, string Type, string AsString);
+
+    [Parameter]
+    public required ChatMessage Message { get; set; }
+
+    private List<RawChatMessage> _rawChatMessages = [];
+
+
+    protected override void OnParametersSet()
+    {
+        _rawChatMessages = Message switch
+        {
+            UserChatMessage userChatMessage => OnUserChatMessage(userChatMessage),
+            AiChatMessage aiChatMessage => OnAiChatMessage(aiChatMessage),
+            _ => []
+        };
+    }
+
+    private static List<RawChatMessage> OnUserChatMessage(UserChatMessage userChatMessage)
+    {
+        return [new(
+            "user",
+            nameof(UserChatMessage),
+            userChatMessage.GetRawContent().Trim())];
+    }
+
+
+    private static List<RawChatMessage> OnAiChatMessage(AiChatMessage aiChatMessage)
+    {
+        var role = "assistant";
+        var rawChatMessages = new List<RawChatMessage>();
+        foreach (var component in aiChatMessage.Components)
+        {
+            switch (component)
+            {
+                case ThinkingMessageComponent thinkingMessageComponent:
+                    rawChatMessages.Add(new(
+                        role,
+                        nameof(ThinkingMessageComponent),
+                        thinkingMessageComponent.Content.Trim()));
+                    break;
+                case TextMessageComponent textMessageComponent:
+                    rawChatMessages.Add(new(
+                        role,
+                        nameof(TextMessageComponent),
+                        textMessageComponent.Content.Trim()));
+                    break;
+                case WebSearchMessageComponent webSearchMessageComponent:
+                    rawChatMessages.Add(new(
+                        role,
+                        nameof(WebSearchMessageComponent),
+                        webSearchMessageComponent.Content.Trim()));
+                    break;
+            }
+        }
+
+        return rawChatMessages;
+    }
+
+}

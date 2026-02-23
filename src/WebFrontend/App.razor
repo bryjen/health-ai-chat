@@ -1,3 +1,10 @@
+@using ShadcnBlazor.Components.Dialog
+@using ShadcnBlazor.Components.Popover
+@using ShadcnBlazor.Components.Sheet
+
+<PopoverProvider RepositionDebounceMilliseconds="1" />
+<DialogProvider />
+<SheetProvider />
 <CascadingAuthenticationState>
     <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
         <Found Context="routeData">
@@ -16,7 +23,4 @@
             <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
         </Found>
     </Router>
-    <ToastContainer />
-    <DialogProvider />
-    <DropdownPortal />
 </CascadingAuthenticationState>

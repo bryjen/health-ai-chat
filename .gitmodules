@@ -1,0 +1,3 @@
+[submodule "src/ShadcnBlazor"]
+	path = src/ShadcnBlazor
+	url = https://github.com/bryjen/ShadcnBlazor/

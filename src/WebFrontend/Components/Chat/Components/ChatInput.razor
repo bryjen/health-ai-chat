@@ -1,0 +1,68 @@
+@using ShadcnBlazor.Components.Textarea
+@using ShadcnBlazor.Components.ToggleButton
+@using ShadcnBlazor.Components.Button
+@using ShadcnBlazor.Components.DropdownMenu
+@using ShadcnBlazor.Components.Select
+
+<ComposableTextArea @bind-Value="@_prompt"
+                    id="@_elementId"
+                    Class="w-full focus-within:border-border focus-within:ring-transparent bg-card rounded-xl"
+                    Rows="3"
+                    Placeholder="Write your prompt here...">
+    <Footer>
+        <div class="flex items-center justify-between text-xs text-muted-foreground">
+            <div class="flex gap-2">
+                <ToggleButton @bind-IsToggled="@_extendedThinkingToggle" Size="@Size" VariantUntoggled="@Variant.Ghost" VariantToggled="@Variant.Default" Class="rounded-xl">
+                    <LuBrain/>
+                </ToggleButton>
+
+                <DropdownMenu>
+                    <DropdownMenuTrigger AsChild="true">
+                        <Button Size="@Size" Variant="@Variant.Outline" Class="text-xs text-muted-foreground">
+                            <LuSettings Class="h-3 w-3"/>
+                            Debug Options
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                            <DropdownMenuLabel>Display</DropdownMenuLabel>
+                            <DropdownMenuCheckboxItem @bind-Checked="@ChatComponentState.RawView">
+                                <span class="text-xs">Show Raw</span>
+                            </DropdownMenuCheckboxItem>
+                        </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+
+            <div class="flex gap-4">
+                <div>
+                    <Select T="string"
+                            Label="Model"
+                            Placeholder="Select a model ..."
+                            MaxVisibleItems="6"
+                            Class="w-[20vw]">
+                        <SelectGroup>
+                            <SelectLabel Text="OpenAI"/>
+                            <SelectItem Value='@("gpt-4.1")' Text="GPT-4.1"/>
+                            <SelectItem Value='@("gpt-4o")' Text="GPT-4o"/>
+                            <SelectItem Value='@("gpt-4o-mini")' Text="GPT-4o Mini"/>
+
+                            <SelectSeparator/>
+
+                            <SelectLabel Text="Anthropic (Claude)"/>
+                            <SelectItem Value='@("claude-3.7-sonnet")' Text="Claude 3.7 Sonnet"/>
+                            <SelectItem Value='@("claude-3.5-sonnet")' Text="Claude 3.5 Sonnet"/>
+                            <SelectItem Value='@("claude-3-haiku")' Text="Claude 3 Haiku"/>
+                        </SelectGroup>
+                    </Select>
+                </div>
+
+                <Button Size="@Size" Variant="@Variant.Default" Class="font-medium rounded-xl"
+                        OnClick="@(_ => SubmitPrompt.InvokeAsync(_prompt))">
+                    <LuArrowUp/>
+                </Button>
+            </div>
+
+        </div>
+    </Footer>
+</ComposableTextArea>

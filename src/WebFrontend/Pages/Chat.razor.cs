@@ -9,7 +9,6 @@ using Microsoft.AspNetCore.Components.Web;
 using Microsoft.JSInterop;
 using Web.Common.DTOs.Health;
 using WebApi.ApiWrapper.Services;
-using WebFrontend.Components.UI.Select;
 using WebFrontend.Models.Chat;
 using WebFrontend.Models.Chat.StatusTypes;
 using WebFrontend.Services;
@@ -19,6 +18,7 @@ namespace WebFrontend.Pages;
 
 public partial class Chat : ComponentBase, IAsyncDisposable
 {
+    /*
     [Inject] private IJSRuntime JS { get; set; } = default!;
     [Inject] private NavigationManager Navigation { get; set; } = default!;
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = default!;
@@ -60,10 +60,10 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         {
             // Connect SignalR first so IsConnected is true quickly
             await ChatHubClient.ConnectAsync();
-            
+
             // Subscribe to status updates
             ChatHubClient.StatusUpdateReceived += OnStatusUpdateReceived;
-            
+
             // Start debounced render loop
             StartRenderLoop();
 
@@ -166,7 +166,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         // Scrolling is now handled by ChatMessageList component
         await Task.CompletedTask;
     }
-    
+
     private void StartRenderLoop()
     {
         // Capture synchronization context for UI thread access
@@ -174,7 +174,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         _renderLoopCancellation = new CancellationTokenSource();
         _renderLoopTask = Task.Run(async () => await RenderLoopAsync(_renderLoopCancellation.Token));
     }
-    
+
     private async Task RenderLoopAsync(CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
@@ -183,7 +183,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             {
                 var processedAny = false;
                 var processedCount = 0;
-                
+
                 // Process all queued status updates
                 while (_statusUpdateQueue.TryDequeue(out var status))
                 {
@@ -201,12 +201,12 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     await JS.InvokeVoidAsync("console.log", $"[RENDER LOOP] Dequeued status: Type={statusType}, Info={statusInfo}, QueueSize: {_statusUpdateQueue.Count}");
                     await ProcessStatusUpdateAsync(status);
                 }
-                
+
                 if (processedCount > 0)
                 {
                     await JS.InvokeVoidAsync("console.log", $"[RENDER LOOP] Processed {processedCount} status updates, QueueSize: {_statusUpdateQueue.Count}");
                 }
-                
+
                 // If we processed any updates, trigger a render
                 if (processedAny)
                 {
@@ -231,7 +231,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                         await InvokeAsync(StateHasChanged);
                     }
                 }
-                
+
                 // Debounce: wait 50ms before next check (max 20fps)
                 await Task.Delay(50, cancellationToken);
             }
@@ -245,7 +245,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             }
         }
     }
-    
+
     private async Task ProcessStatusUpdateAsync(StatusInformation status)
     {
         var statusType = status.GetType().Name;
@@ -257,14 +257,14 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             GeneralStatus gen => $"General: {gen.Message}",
             _ => status.ToString() ?? "Unknown"
         };
-        
+
         await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] Processing: Type={statusType}, Info={statusInfo}, HasProcessingMessage={_currentProcessingMessage != null}, CurrentStatusCount={_currentStatusUpdates.Count}");
-        
+
         if (_currentProcessingMessage != null)
         {
             // Check for duplicates before adding
             bool isDuplicate = false;
-            
+
             if (status is AssessmentGeneratingStatus)
             {
                 isDuplicate = _currentStatusUpdates.OfType<AssessmentGeneratingStatus>().Any();
@@ -288,7 +288,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     .Any(s => s.Message == general.Message);
                 await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] GeneralStatus duplicate check: {isDuplicate} (Message={general.Message})");
             }
-            
+
             if (!isDuplicate)
             {
                 _currentStatusUpdates.Add(status);
@@ -298,14 +298,14 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             {
                 await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] DUPLICATE DETECTED - Not adding. Current count: {_currentStatusUpdates.Count}");
             }
-            
+
             // Deduplicate and sort status updates by type order
             var deduplicatedStatuses = new List<StatusInformation>();
             var seenGenerating = false;
             var seenAnalyzing = false;
             var seenCreatedIds = new HashSet<int>();
             var seenGeneralMessages = new HashSet<string>();
-            
+
             foreach (var s in _currentStatusUpdates.OrderBy(s => GetStatusSortOrder(s)).ThenBy(s => s.Timestamp))
             {
                 if (s is AssessmentGeneratingStatus)
@@ -347,13 +347,13 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     deduplicatedStatuses.Add(s);
                 }
             }
-            
+
             // Always create new list instance to ensure Blazor detects change
             _currentProcessingMessage.StatusInformation = deduplicatedStatuses;
-            
+
             var statusTypes = string.Join(", ", deduplicatedStatuses.Select(s => s.GetType().Name));
             await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] After deduplication: Count={deduplicatedStatuses.Count}, Types=[{statusTypes}]");
-            
+
             // Only add the message to UI if it hasn't been added yet and we have status updates
             // This prevents showing empty bubbles
             if (_currentProcessingMessage.Content == null && deduplicatedStatuses.Any())
@@ -418,12 +418,12 @@ public partial class Chat : ComponentBase, IAsyncDisposable
 
             // Merge real-time status updates with EntityChanges-based statuses
             var entityStatuses = ConvertEntityChangesToStatusInformation(
-                response.SymptomChanges, 
+                response.SymptomChanges,
                 response.AssessmentChanges);
-            
+
             // Combine real-time statuses with entity-based statuses
             var allStatuses = new List<StatusInformation>(_currentStatusUpdates);
-            
+
             // Add entity-based statuses, avoiding duplicates
             foreach (var entityStatus in entityStatuses)
             {
@@ -460,7 +460,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     allStatuses.Add(entityStatus);
                 }
             }
-            
+
             // Deduplicate by type - ensure each assessment status type appears only once
             // Also deduplicate general statuses with the same message
             var deduplicatedStatuses = new List<StatusInformation>();
@@ -468,7 +468,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             var seenAnalyzing = false;
             var seenCreatedIds = new HashSet<int>();
             var seenGeneralMessages = new HashSet<string>();
-            
+
             foreach (var status in allStatuses.OrderBy(s => GetStatusSortOrder(s)).ThenBy(s => s.Timestamp))
             {
                 if (status is AssessmentGeneratingStatus)
@@ -510,7 +510,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     deduplicatedStatuses.Add(status);
                 }
             }
-            
+
             allStatuses = deduplicatedStatuses;
 
             // Remove processing message if it was added
@@ -521,7 +521,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
 
             // Extract message from JSON if content is JSON
             var messageContent = ExtractMessageFromJson(response.Message);
-            
+
             // Create final AI message with all statuses
             var aiMessage = new ChatMessage
             {
@@ -532,7 +532,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             };
 
             Messages.Add(aiMessage);
-            
+
             _currentProcessingMessage = null;
             _currentStatusUpdates.Clear();
         }
@@ -673,7 +673,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     case "updated":
                         statusList.Add(new GeneralStatus
                         {
-                            Message = !string.IsNullOrEmpty(change.Name) 
+                            Message = !string.IsNullOrEmpty(change.Name)
                                 ? $"Updated {change.Name} details"
                                 : "Updated symptom details"
                         });
@@ -696,7 +696,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         {
             foreach (var change in assessmentChanges)
             {
-                if (change.Action.ToLowerInvariant() == "created" && 
+                if (change.Action.ToLowerInvariant() == "created" &&
                     int.TryParse(change.Id, out var assessmentId))
                 {
                     statusList.Add(new AssessmentCreatedStatus
@@ -963,7 +963,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             _renderLoopCancellation.Cancel();
             _renderLoopCancellation.Dispose();
         }
-        
+
         // Wait for render loop to finish
         if (_renderLoopTask != null)
         {
@@ -976,11 +976,16 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 // Expected when cancelling
             }
         }
-        
+
         // Unsubscribe from status updates
         ChatHubClient.StatusUpdateReceived -= OnStatusUpdateReceived;
-        
+
         // Don't dispose ChatHubClient here - it's a scoped service managed by DI
         // Disposing it here would break reconnection when navigating back
+    }
+     */
+    public async ValueTask DisposeAsync()
+    {
+        // TODO release managed resources here
     }
 }

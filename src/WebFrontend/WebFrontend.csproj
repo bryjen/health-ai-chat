@@ -11,17 +11,19 @@
         <!-- Skip validation in Debug for faster builds -->
         <BlazorWebAssemblyPreserveCollapsedWhitespace Condition="'$(Configuration)' == 'Debug'">true</BlazorWebAssemblyPreserveCollapsedWhitespace>
     </PropertyGroup>
-
+    
     <ItemGroup>
         <PackageReference Include="EasyAppDev.Blazor.Icons.Lucide" Version="2.0.4" />
+        <PackageReference Include="Markdig" Version="1.0.0" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.2" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.2" PrivateAssets="all" />
         <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0" />
         <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.0" />
-        <PackageReference Include="TwMerge" Version="1.0.7" />
+        <PackageReference Include="TailwindMerge.NET" Version="1.2.0" />
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\ShadcnBlazor\src\ShadcnBlazor\ShadcnBlazor.csproj" />
         <ProjectReference Include="..\WebApi.ApiWrapper\WebApi.ApiWrapper.csproj" />
     </ItemGroup>
 
@@ -40,6 +42,20 @@
       <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\SymptomAddedBubble.razor" />
       <_ContentIncludedByDefault Remove="Components\Chat\StatusBubbles\SymptomGatheringBubble.razor" />
       <_ContentIncludedByDefault Remove="Components\Chat\StatusInformationRenderer.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Episodes\EpisodeDetail.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Settings\AppSettings.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Settings\PersonalInformation.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Settings\Usage.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Assessments\AssessmentDetail.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Assessments\AssessmentsList.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Symptoms\SymptomsList.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Auth\Login.razor" />
+      <_ContentIncludedByDefault Remove="Pages\Auth\Register.razor" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <UpToDateCheckInput Remove="Components\Chat\ChatMessageList.razor" />
+      <UpToDateCheckInput Remove="Components\Chat\StatusInformationRenderer.razor" />
     </ItemGroup>
 
 </Project>

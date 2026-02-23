@@ -1,0 +1,58 @@
+﻿@using WebFrontend.Components.Chat.Components
+@using WebFrontend.Components.Chat.Components.Messages
+@using WebFrontend.Components.Chat.Models
+@inherits ShadcnComponentBase
+
+<CascadingValue Value="_chatComponentState" Name="@nameof(ChatComponentState)">
+    <div class="@(MergeCss("grid grid-rows-[1fr_auto] h-full w-full", Class))">
+        <div id="chat-feed" class="flex flex-col gap-4 overflow-y-scroll scrollbar-hide">
+
+            @if (ChatOrchestrator.Messages.Count == 0)
+            {
+                <div class="flex-1 flex items-center justify-center">
+                    <div class="text-center">
+                        <div class="mb-6 flex flex-col items-center justify-center gap-2">
+                            <svg class="-mb-2 w-10 h-10 text-primary" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                            <h1 class="!text-4xl font-semibold text-foreground">
+                                Hello, I'm Salus!
+                            </h1>
+                            <span class="text-sm text-foreground">
+                                How may I help you today?
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="w-full h-full py-12 px-8">
+                    @foreach (var chatMsg in ChatOrchestrator.Messages)
+                    {
+                        if (_chatComponentState.RawView)
+                        {
+                            <RawChatMessageView Message="@chatMsg" />
+                        }
+                        else
+                        {
+                            switch (chatMsg)
+                            {
+                                case UserChatMessage userChatMessage:
+                                    <UserChatMessageView Message="@userChatMessage"/>
+                                    break;
+                                case AiChatMessage aiChatMessage:
+                                    <AiChatMessageView Message="@aiChatMessage"/>
+                                    break;
+                            }
+                        }
+                    }
+                </div>
+            }
+        </div>
+
+        <div id="chat-input">
+            <ChatInput SubmitPrompt="SubmitPrompt"/>
+        </div>
+    </div>
+</CascadingValue>
