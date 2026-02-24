@@ -22,12 +22,27 @@ public partial class ChatInput : ComponentBase, IAsyncDisposable
     [Parameter]
     public EventCallback<string> SubmitPrompt { get; set; }
 
+    [Parameter]
+    public EventCallback NotifyParent { get; set; }
+
     private string _prompt = string.Empty;
     private bool _extendedThinkingToggle = true;
 
     private string? _framework = "dotnet";
 
     private bool _showRaw = true;
+
+    private async Task CheckedChanged()
+    {
+        ChatComponentState.RawView = !ChatComponentState.RawView;
+        await NotifyParent.InvokeAsync();
+    }
+
+    private async Task ShowUnknownTagsChanged()
+    {
+        ChatComponentState.ShowUnknownTags = !ChatComponentState.ShowUnknownTags;
+        await NotifyParent.InvokeAsync();
+    }
 
 
 #region KeyInterceptor
@@ -37,7 +52,7 @@ public partial class ChatInput : ComponentBase, IAsyncDisposable
     [JSInvokable]
     public async Task OnKeyDown(string elementId, KeyInterceptorEventArgs args)
     {
-        if ((args.CtrlKey || args.MetaKey) && args.Key == "Enter")  // submit on enter
+        if (args.Key == "Enter" && !args.CtrlKey && !args.MetaKey && !args.ShiftKey)  // submit on plain Enter
         {
             await SubmitPrompt.InvokeAsync(_prompt);
             _prompt = string.Empty;
@@ -48,6 +63,7 @@ public partial class ChatInput : ComponentBase, IAsyncDisposable
             _prompt = string.Empty;
             await InvokeAsync(StateHasChanged);
         }
+        // Ctrl/Shift+Enter falls through — textarea inserts newline naturally
     }
 
     [JSInvokable]
@@ -62,7 +78,7 @@ public partial class ChatInput : ComponentBase, IAsyncDisposable
         {
             _dotNetRef = DotNetObjectReference.Create(this);
             var options = new KeyInterceptorOptions(
-                new KeyOptions("Enter", subscribeDown: true, preventDown: "key+ctrl+none", stopDown: "key+ctrl+none"),
+                new KeyOptions("Enter", subscribeDown: true, preventDown: "key+none", stopDown: "key+none"),
                 new KeyOptions("Escape", subscribeDown: true)
             );
             try

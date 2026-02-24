@@ -64,6 +64,21 @@
                         nameof(WebSearchMessageComponent),
                         webSearchMessageComponent.Content.Trim()));
                     break;
+                case ToolCallMessageComponent toolCallMessageComponent:
+                    rawChatMessages.Add(new(
+                        role,
+                        nameof(ToolCallMessageComponent),
+                        toolCallMessageComponent.FunctionName.Trim()));
+                    break;
+                case SymptomCreatedMessageComponent symptomCreatedMessageComponent:
+                    rawChatMessages.Add(new(
+                        role,
+                        nameof(SymptomCreatedMessageComponent),
+                        symptomCreatedMessageComponent.RawJson.Trim()));
+                    break;
+                case UnknownMessageComponent u:
+                    rawChatMessages.Add(new(role, nameof(UnknownMessageComponent), $"[{u.TagName}] {u.Content.Trim()}"));
+                    break;
             }
         }
 

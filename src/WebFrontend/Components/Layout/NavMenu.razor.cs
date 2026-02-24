@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Web.Common.DTOs.Conversations;
 using WebApi.ApiWrapper.Services;
+using WebFrontend.Components.Chat.Services;
 using WebFrontend.Services;
 using WebFrontend.Services.Auth;
 
@@ -16,12 +17,13 @@ public partial class NavMenu : ComponentBase, IDisposable
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; set; } = null!;
     [Inject] private IConversationsApiClient ConversationsApiClient { get; set; } = null!;
     [Inject] private ChatHubClient ChatHubClient { get; set; } = null!;
+    [Inject] private ChatOrchestrator ChatOrchestrator { get; set; } = null!;
 
     protected bool CollapseNavMenu { get; set; } = true;
     protected List<ConversationSummaryDto> Conversations { get; set; } = new();
     protected string SearchQuery { get; set; } = string.Empty;
     protected bool IsLoadingConversations { get; set; } = false;
-    protected Guid? OpenDropdownId { get; set; }
+    protected string? OpenDropdownId { get; set; }
     protected bool IsDeleting { get; set; } = false;
 
     protected List<ConversationSummaryDto> FilteredConversations
@@ -44,8 +46,8 @@ public partial class NavMenu : ComponentBase, IDisposable
     {
         await LoadConversationsAsync();
 
-        // Refresh conversations when navigation occurs
         Navigation.LocationChanged += OnLocationChanged;
+        ChatOrchestrator.OnConversationStarted += OnConversationStarted;
     }
 
     private async void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
@@ -60,9 +62,10 @@ public partial class NavMenu : ComponentBase, IDisposable
     protected async Task LoadConversationsAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        if (!authState.User.Identity?.IsAuthenticated ?? true)
+        if (authState.User.Identity?.IsAuthenticated != true)
         {
             Conversations.Clear();
+            StateHasChanged();
             return;
         }
 
@@ -134,7 +137,7 @@ public partial class NavMenu : ComponentBase, IDisposable
         return authState.User?.Identity?.Name ?? "User";
     }
 
-    protected async Task ToggleDropdownAsync(Guid conversationId)
+    protected async Task ToggleDropdownAsync(string conversationId)
     {
         if (OpenDropdownId == conversationId)
         {
@@ -146,10 +149,10 @@ public partial class NavMenu : ComponentBase, IDisposable
         }
     }
 
-    protected async Task OpenDropdownAsync(Guid conversationId)
+    protected async Task OpenDropdownAsync(string conversationId)
     {
         OpenDropdownId = conversationId;
-        var dropdownId = conversationId.ToString();
+        var dropdownId = conversationId;
 
         // Find the conversation to get its title for the dropdown content
         var conversation = Conversations.FirstOrDefault(c => c.Id == conversationId);
@@ -179,7 +182,7 @@ public partial class NavMenu : ComponentBase, IDisposable
          */
     }
 
-    protected async Task HandleDeleteConversation(Guid conversationId)
+    protected async Task HandleDeleteConversation(string conversationId)
     {
         if (IsDeleting)
             return;
@@ -211,8 +214,14 @@ public partial class NavMenu : ComponentBase, IDisposable
         }
     }
 
+    private async Task OnConversationStarted(string conversationId)
+    {
+        await LoadConversationsAsync();
+    }
+
     public void Dispose()
     {
         Navigation.LocationChanged -= OnLocationChanged;
+        ChatOrchestrator.OnConversationStarted -= OnConversationStarted;
     }
 }

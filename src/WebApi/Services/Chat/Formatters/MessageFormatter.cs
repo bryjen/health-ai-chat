@@ -87,6 +87,12 @@ public class MessageFormatter
     }
 
     /// <summary>
+    /// Categories that are never emitted to the frontend, in both streaming and replay paths.
+    /// </summary>
+    public static bool ShouldSkip(ContentCategory category) =>
+        category is ContentCategory.ToolCall or ContentCategory.ToolResult;
+
+    /// <summary>
     /// Format usage information.
     /// </summary>
     private string FormatUsage(UsageContent usage)

@@ -1,11 +1,15 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Web.Common.DTOs;
 using WebApi.Controllers.Utils;
+using WebApi.Data;
 using WebApi.Services.Chat;
+using WebApi.Services.Chat.Formatters;
 using WebApi.Services.Chat.HistoryProviders;
 using WebApi.Services.Chat.Response;
 
@@ -19,7 +23,9 @@ namespace WebApi.Controllers;
 public class ConversationsController(
     SessionManager sessionManager,
     ChatService chatService,
-    HttpResponseWriter responseWriter)
+    HttpResponseWriter responseWriter,
+    AppDbContext dbContext,
+    MessageFormatter messageFormatter)
     : BaseController
 {
     /// <summary>
@@ -29,14 +35,18 @@ public class ConversationsController(
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<List<object>>> ListConversations()
     {
-        var sessions = await sessionManager.GetSessionsAsync();
-
-        var conversations = sessions.Select(s => new
-        {
-            id = s.Id,
-            createdAt = s.CreatedAt,
-            updatedAt = s.UpdatedAt
-        }).ToList();
+        var conversations = await dbContext.ChatMessages
+            .Where(m => m.SessionId != null && m.MessageText != null)
+            .GroupBy(m => m.SessionId!)
+            .Select(g => new
+            {
+                id = g.Key,
+                title = g.OrderBy(m => m.Timestamp).First().MessageText,
+                last_message_preview = g.OrderByDescending(m => m.Timestamp).First().MessageText,
+                updated_at = g.Max(m => m.Timestamp)
+            })
+            .OrderByDescending(s => s.updated_at)
+            .ToListAsync();
 
         return Ok(conversations);
     }
@@ -51,19 +61,30 @@ public class ConversationsController(
     {
         try
         {
-            var history = await sessionManager.GetSessionHistoryAsync(conversationId);
+            var entities = await dbContext.ChatMessages
+                .Where(e => e.SessionId == conversationId)
+                .OrderBy(e => e.Timestamp)
+                .ToListAsync();
 
-            var messages = history.Select(m => new
-            {
-                role = m.Role.ToString().ToLower(),
-                content = string.Join(" ", m.Contents
-                    .OfType<TextContent>()
-                    .Select(tc => tc.Text))
-            }).ToList();
+            if (entities.Count == 0)
+                throw new ArgumentException("Conversation not found");
+
+            var messages = entities
+                .Where(e => e.SerializedMessage != null)
+                .Select(e => (message: JsonSerializer.Deserialize<ChatMessage>(e.SerializedMessage!)!, entity: e))
+                // filter goes here
+                .Select(x => new
+                {
+                    role = x.message.Role.ToString().ToLower(),
+                    content = x.message.Role == ChatRole.User
+                        ? string.Join(" ", x.message.Contents.OfType<TextContent>().Select(tc => tc.Text))
+                        : FormatAsTagged(x.message, x.entity.EmittedTags)
+                }).ToList();
 
             var conversation = new
             {
                 id = conversationId,
+                title = (string?)null,
                 messages = messages
             };
 
@@ -75,7 +96,6 @@ public class ConversationsController(
         }
     }
 
-    [AllowAnonymous]
     [HttpPost("messages")]
     public async Task SendMessage([FromBody] ChatMessageRequest request, CancellationToken cancellationToken)
     {
@@ -127,6 +147,43 @@ public class ConversationsController(
         }
     }
 
+    private string FormatAsTagged(ChatMessage message, string? emittedTags = null)
+    {
+        var sb = new StringBuilder();
+
+        // Prepend out-of-band tags verbatim — they were emitted before the assistant text during the live
+        // response and must appear first, without going through the formatter (which would wrap them in <Text>).
+        if (!string.IsNullOrEmpty(emittedTags))
+            sb.Append(emittedTags);
+
+        ContentCategory? current = null;
+
+        foreach (var chunk in messageFormatter.FormatMessage(message))
+        {
+            if (MessageFormatter.ShouldSkip(chunk.Category))
+                continue;
+
+            if (current is null)
+            {
+                current = chunk.Category;
+                sb.Append($"<{chunk.Category}>\n");
+            }
+            else if (chunk.Category != current)
+            {
+                sb.Append($"\n</{current}>\n\n");
+                current = chunk.Category;
+                sb.Append($"<{chunk.Category}>\n");
+            }
+
+            sb.Append(chunk.Text);
+        }
+
+        if (current is not null)
+            sb.Append($"\n</{current}>");
+
+        return sb.ToString();
+    }
+
     /// <summary>
     /// Delete a conversation.
     /// </summary>
@@ -135,8 +192,16 @@ public class ConversationsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteConversation(string conversationId)
     {
-        // TODO: Implement actual deletion in SessionManager
-        // For now, this is a placeholder
+        var messages = await dbContext.ChatMessages
+            .Where(m => m.SessionId == conversationId)
+            .ToListAsync();
+
+        if (messages.Count == 0)
+            return NotFound();
+
+        dbContext.ChatMessages.RemoveRange(messages);
+        await dbContext.SaveChangesAsync();
+
         return NoContent();
     }
 }

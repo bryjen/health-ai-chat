@@ -23,7 +23,7 @@ public interface IConversationsApiClient
     /// <exception cref="Exceptions.ApiUnauthorizedException">Thrown when user is not authenticated (401).</exception>
     /// <exception cref="Exceptions.ApiNotFoundException">Thrown when conversation is not found (404).</exception>
     /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
-    Task<ConversationDto?> GetConversationByIdAsync(Guid id);
+    Task<ConversationDto?> GetConversationByIdAsync(string id);
 
     /// <summary>
     /// Updates the title of a conversation.
@@ -44,5 +44,14 @@ public interface IConversationsApiClient
     /// <exception cref="Exceptions.ApiUnauthorizedException">Thrown when user is not authenticated (401).</exception>
     /// <exception cref="Exceptions.ApiNotFoundException">Thrown when conversation is not found (404).</exception>
     /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
-    Task DeleteConversationAsync(Guid id);
+    Task DeleteConversationAsync(string id);
+
+    /// <summary>
+    /// Sends a message and streams the response line by line.
+    /// </summary>
+    /// <param name="message">The user message to send.</param>
+    /// <param name="conversationId">Optional existing conversation ID to continue.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An async enumerable of raw lines from the response stream.</returns>
+    IAsyncEnumerable<string> SendMessageStreamAsync(string message, string? conversationId, CancellationToken cancellationToken = default);
 }

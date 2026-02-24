@@ -19,7 +19,7 @@ public class ConsoleChatOrchestrator(
     ChatService chatService,
     SessionManager sessionManager,
     IServiceScopeFactory serviceScopeFactory,
-    ResponseWriter responseWriter)
+    ConsoleResponseWriter responseWriter)
 {
     /// <summary>
     /// Main entry point - handles session selection and runs chat loop.

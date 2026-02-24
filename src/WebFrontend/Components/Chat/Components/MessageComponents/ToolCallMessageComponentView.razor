@@ -1,0 +1,23 @@
+@inherits ShadcnComponentBase
+@using WebFrontend.Components.Chat.Models
+
+<div class="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+    <div class="flex items-center justify-center w-4 h-4 rounded-sm bg-muted">
+        <LuWrench class="w-2.5 h-2.5" />
+    </div>
+    <span>Called <span class="font-mono font-medium text-foreground/80">@_displayName</span></span>
+</div>
+
+@code {
+    [Parameter]
+    public required ToolCallMessageComponent Component { get; set; }
+
+    private string _displayName = string.Empty;
+
+    protected override void OnParametersSet()
+    {
+        // Convert snake_case / PascalCase function names to readable form
+        var name = Component.FunctionName?.Trim() ?? string.Empty;
+        _displayName = string.IsNullOrEmpty(name) ? "tool" : name;
+    }
+}

@@ -18,4 +18,9 @@ public class ChatMessageEntity
 
     [VectorStoreData]
     public string? MessageText { get; set; }
+
+    // Out-of-band tags emitted during plugin execution (e.g. <SymptomCreated>).
+    // Stored separately so they can be prepended verbatim on conversation replay
+    // without going through the message formatter (which would wrap them in <Text>).
+    public string? EmittedTags { get; set; }
 }

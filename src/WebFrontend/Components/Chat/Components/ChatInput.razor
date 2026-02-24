@@ -26,8 +26,11 @@
                     <DropdownMenuContent>
                         <DropdownMenuGroup>
                             <DropdownMenuLabel>Display</DropdownMenuLabel>
-                            <DropdownMenuCheckboxItem @bind-Checked="@ChatComponentState.RawView">
+                            <DropdownMenuCheckboxItem Checked="@ChatComponentState.RawView" CheckedChanged="@CheckedChanged">
                                 <span class="text-xs">Show Raw</span>
+                            </DropdownMenuCheckboxItem>
+                            <DropdownMenuCheckboxItem Checked="@ChatComponentState.ShowUnknownTags" CheckedChanged="@ShowUnknownTagsChanged">
+                                <span class="text-xs">Show Unknown Tags</span>
                             </DropdownMenuCheckboxItem>
                         </DropdownMenuGroup>
                     </DropdownMenuContent>

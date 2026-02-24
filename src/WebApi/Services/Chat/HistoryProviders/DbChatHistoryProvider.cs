@@ -5,6 +5,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using WebApi.Models.EfCore.Chat;
 using WebApi.Data;
+using WebApi.Services.Chat.Response;
 
 #pragma warning disable MEAI001
 
@@ -13,10 +14,12 @@ namespace WebApi.Services.Chat.HistoryProviders;
 public sealed class DbChatHistoryProvider : ChatHistoryProvider
 {
     private readonly IServiceScopeFactory _serviceScopeFactory;
+    private readonly ResponseWriter _responseWriter;
 
-    public DbChatHistoryProvider(IServiceScopeFactory serviceScopeFactory, JsonElement serializedState)
+    public DbChatHistoryProvider(IServiceScopeFactory serviceScopeFactory, ResponseWriter responseWriter, JsonElement serializedState)
     {
         _serviceScopeFactory = serviceScopeFactory ?? throw new ArgumentNullException(nameof(serviceScopeFactory));
+        _responseWriter = responseWriter;
 
         if (serializedState.ValueKind is JsonValueKind.String)
         {
@@ -104,9 +107,17 @@ public sealed class DbChatHistoryProvider : ChatHistoryProvider
             .Where(m => !m.Contents.Any(c => c is FunctionApprovalRequestContent or FunctionApprovalResponseContent))
             .ToList();
 
+        // Drain any out-of-band tags emitted during plugin execution this turn.
+        // We'll attach them to the last assistant entity after the save loop.
+        var emittedRaw = _responseWriter.DrainEmittedRaw();
+        var lastAssistantKey = (string?)null;
+
         foreach (var message in persistableMessages)
         {
-            var key = SessionDbKey + message.MessageId;
+            var messageId = message.MessageId
+                ?? $"{message.Role}-{Convert.ToHexString(System.Security.Cryptography.MD5.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(message.Text ?? string.Empty)))}";
+            var key = SessionDbKey + messageId;
             var existing = await dbContext.ChatMessages.FindAsync([key], cancellationToken);
 
             // Log what we're saving for debugging
@@ -130,6 +141,17 @@ public sealed class DbChatHistoryProvider : ChatHistoryProvider
                     MessageText = message.Text
                 });
             }
+
+            if (message.Role == ChatRole.Assistant)
+                lastAssistantKey = key;
+        }
+
+        // Attach emitted tags to the last assistant message entity so they're available on replay.
+        if (emittedRaw.Count > 0 && lastAssistantKey is not null)
+        {
+            var entity = await dbContext.ChatMessages.FindAsync([lastAssistantKey], cancellationToken);
+            if (entity is not null)
+                entity.EmittedTags = string.Concat(emittedRaw);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);

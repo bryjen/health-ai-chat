@@ -12,6 +12,11 @@ public abstract class ResponseWriter(MessageFormatter formatter)
 {
     private ContentCategory? _currentCategory;
 
+    // Out-of-band tags (e.g. <SymptomCreated>) are emitted directly to the stream during plugin execution
+    // and are never part of any ChatMessage. We buffer them here so DbChatHistoryProvider can append them
+    // to the assistant message before persisting, making them available on conversation reload.
+    private readonly List<string> _emittedRaw = [];
+
     /// <summary>
     /// Write a streaming update chunk.
     /// </summary>
@@ -20,6 +25,8 @@ public abstract class ResponseWriter(MessageFormatter formatter)
         var formatted = formatter.FormatUpdate(update);
         foreach (var content in formatted)
         {
+            if (MessageFormatter.ShouldSkip(content.Category))
+                continue;
             await WrapContentCategory(content.Category, cancellationToken);
             await WriteCoreAsync(content, cancellationToken);
         }
@@ -89,8 +96,31 @@ public abstract class ResponseWriter(MessageFormatter formatter)
     }
 
     /// <summary>
-    /// Write raw text (for tags).
+    /// Write raw text (for tags). Exposed internally for middleware use.
     /// </summary>
+    internal Task EmitRawAsync(string text, CancellationToken cancellationToken) => WriteRawAsync(text, cancellationToken);
+
+    /// <summary>
+    /// Emits a structured tag to the stream and records it for persistence.
+    /// </summary>
+    internal async Task EmitRawAsync(string tag, string serialized, CancellationToken cancellationToken)
+    {
+        var raw = $"<{tag}>{serialized}</{tag}>\n";
+        _emittedRaw.Add(raw);
+        await WriteRawAsync(raw, cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns all out-of-band tags emitted this turn and clears the buffer.
+    /// Call this once after the agent run completes, before persisting.
+    /// </summary>
+    internal IReadOnlyList<string> DrainEmittedRaw()
+    {
+        var copy = _emittedRaw.ToList();
+        _emittedRaw.Clear();
+        return copy;
+    }
+
     protected abstract Task WriteRawAsync(string text, CancellationToken cancellationToken);
 
     /// <summary>

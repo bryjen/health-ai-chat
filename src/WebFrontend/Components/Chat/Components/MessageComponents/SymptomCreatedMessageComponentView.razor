@@ -1,0 +1,14 @@
+@inherits ShadcnComponentBase
+@using WebFrontend.Components.Chat.Models
+
+<div class="flex items-center gap-2 py-1 text-xs text-muted-foreground">
+    <div class="flex items-center justify-center w-4 h-4 rounded-sm bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+        <LuPlus class="w-2.5 h-2.5" />
+    </div>
+    <span>Recorded symptom <span class="font-medium text-foreground/80">@(Component.SymptomName ?? "unknown")</span></span>
+</div>
+
+@code {
+    [Parameter]
+    public required SymptomCreatedMessageComponent Component { get; set; }
+}

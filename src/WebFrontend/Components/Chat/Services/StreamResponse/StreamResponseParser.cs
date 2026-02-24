@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using WebFrontend.Components.Chat.Models;
 
 namespace WebFrontend.Components.Chat.Services.StreamResponse;
@@ -8,6 +9,7 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
     private readonly StringBuilder _buffer = new();
     private ParseMode _mode = ParseMode.None;
     private MessageComponent? _activeComponent;
+    private string? _unknownTagName;
 
     public void AppendChunk(string chunk)
     {
@@ -57,13 +59,13 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
         if (string.IsNullOrWhiteSpace(tagToken))
             return;
 
-        if (IsEndTag(tagToken, "thinking") || IsEndTag(tagToken, "search") || IsEndTag(tagToken, "text"))
+        if (IsEndTag(tagToken, "thinking") || IsEndTag(tagToken, "reasoning") || IsEndTag(tagToken, "search") || IsEndTag(tagToken, "text") || IsEndTag(tagToken, "toolcall") || IsEndTag(tagToken, "symptomcreated"))
         {
             ResetMode();
             return;
         }
 
-        if (IsStartTag(tagToken, "thinking"))
+        if (IsStartTag(tagToken, "thinking") || IsStartTag(tagToken, "reasoning"))
         {
             SetMode(ParseMode.Thinking);
             return;
@@ -78,7 +80,36 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
         if (IsStartTag(tagToken, "text"))
         {
             SetMode(ParseMode.Text);
+            return;
         }
+
+        if (IsStartTag(tagToken, "toolcall"))
+        {
+            SetMode(ParseMode.ToolCall);
+            return;
+        }
+
+        if (IsStartTag(tagToken, "symptomcreated"))
+        {
+            SetMode(ParseMode.SymptomCreated);
+            return;
+        }
+
+        // Unknown tag handling
+        if (!tagToken.StartsWith('/'))
+        {
+            SetModeUnknown(tagToken);
+        }
+        else if (_mode == ParseMode.Unknown && IsEndTag(tagToken, _unknownTagName!))
+        {
+            ResetMode();
+        }
+    }
+
+    private void SetModeUnknown(string tagName)
+    {
+        _unknownTagName = tagName;
+        SetMode(ParseMode.Unknown);
     }
 
     private void SetMode(ParseMode mode)
@@ -97,17 +128,39 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
             thinking.ThinkingTime = rand.Next(min, max + 1);
         }
 
+        if (_mode == ParseMode.SymptomCreated && _activeComponent is SymptomCreatedMessageComponent sc)
+        {
+            ParseSymptomCreatedJson(sc);
+        }
+
         _mode = ParseMode.None;
         _activeComponent = null;
+        _unknownTagName = null;
     }
 
-    private static MessageComponent CreateComponent(ParseMode mode)
+    private static void ParseSymptomCreatedJson(SymptomCreatedMessageComponent component)
+    {
+        try
+        {
+            var doc = JsonDocument.Parse(component.RawJson);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("symptom_id", out var sid)) component.SymptomId = sid.GetInt32();
+            if (root.TryGetProperty("episode_id", out var eid)) component.EpisodeId = eid.GetInt32();
+            if (root.TryGetProperty("symptom_name", out var name)) component.SymptomName = name.GetString();
+        }
+        catch (JsonException) { }
+    }
+
+    private MessageComponent CreateComponent(ParseMode mode)
     {
         return mode switch
         {
             ParseMode.Thinking => new ThinkingMessageComponent { Content = string.Empty },
             ParseMode.Search => new WebSearchMessageComponent { Content = string.Empty },
             ParseMode.Text => new TextMessageComponent { Content = string.Empty },
+            ParseMode.ToolCall => new ToolCallMessageComponent { FunctionName = string.Empty },
+            ParseMode.SymptomCreated => new SymptomCreatedMessageComponent { RawJson = string.Empty },
+            ParseMode.Unknown => new UnknownMessageComponent { TagName = _unknownTagName!, Content = string.Empty },
             _ => throw new InvalidOperationException("Cannot create component for None mode.")
         };
     }
@@ -145,6 +198,15 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
                 break;
             case TextMessageComponent text:
                 text.Content += content;
+                break;
+            case ToolCallMessageComponent toolCall:
+                toolCall.FunctionName += content;
+                break;
+            case SymptomCreatedMessageComponent symptomCreated:
+                symptomCreated.RawJson += content;
+                break;
+            case UnknownMessageComponent unknown:
+                unknown.Content += content;
                 break;
         }
     }
@@ -194,6 +256,9 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
         None,
         Thinking,
         Search,
-        Text
+        Text,
+        ToolCall,
+        SymptomCreated,
+        Unknown
     }
 }

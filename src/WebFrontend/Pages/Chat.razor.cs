@@ -984,6 +984,9 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         // Disposing it here would break reconnection when navigating back
     }
      */
+    [SupplyParameterFromQuery]
+    public string? Conversation { get; set; }
+
     public async ValueTask DisposeAsync()
     {
         // TODO release managed resources here

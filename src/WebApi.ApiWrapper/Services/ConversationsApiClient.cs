@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using Web.Common.DTOs.Conversations;
 
 namespace WebApi.ApiWrapper.Services;
@@ -35,10 +36,10 @@ public class ConversationsApiClient : BaseApiClient, IConversationsApiClient
     }
 
     /// <inheritdoc/>
-    public async Task<ConversationDto?> GetConversationByIdAsync(Guid id)
+    public async Task<ConversationDto?> GetConversationByIdAsync(string id)
     {
         await EnsureAuthenticatedAsync();
-        
+
         var response = await HttpClient.GetAsync($"api/v1/conversations/{id}");
         
         if (!response.IsSuccessStatusCode)
@@ -66,7 +67,38 @@ public class ConversationsApiClient : BaseApiClient, IConversationsApiClient
     }
 
     /// <inheritdoc/>
-    public async Task DeleteConversationAsync(Guid id)
+    public async IAsyncEnumerable<string> SendMessageStreamAsync(
+        string message,
+        string? conversationId,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await EnsureAuthenticatedAsync();
+
+        var requestBody = new { message, conversationId };
+        var requestMessage = new HttpRequestMessage(HttpMethod.Post, "api/v1/conversations/messages")
+        {
+            Content = JsonContent.Create(requestBody, options: BaseApiClient.JsonOptions)
+        };
+
+        var response = await HttpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            await HandleErrorResponseAsync(response);
+        }
+
+        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        var buffer = new byte[4096];
+        int bytesRead;
+
+        while ((bytesRead = await stream.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            yield return System.Text.Encoding.UTF8.GetString(buffer, 0, bytesRead);
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteConversationAsync(string id)
     {
         await EnsureAuthenticatedAsync();
         

@@ -7,6 +7,7 @@ using FluentValidation;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
 using Microsoft.Extensions.AI;
+using OpenAI.Chat;
 using WebApi.Configuration.Options;
 using WebApi.Services;
 using WebApi.Services.Chat;
@@ -15,7 +16,7 @@ using WebApi.Services.Chat.HistoryProviders;
 using WebApi.Services.Chat.Plugins;
 using WebApi.Services.Chat.Response;
 using WebApi.Services.Data;
-using static WebApi.Services.Chat.Middleware.AgentMiddleware;
+using WebApi.Services.Chat.Middleware;
 
 using MessageCreateParams = Anthropic.Models.Messages.MessageCreateParams;
 using Converter = WebApi.Configuration.AgentProviderConverter;
@@ -71,14 +72,42 @@ public static class AiConfiguration
         services.AddScoped<EpisodeService>();
         services.AddScoped<SymptomService>();
 
+        services.AddScoped<AgentMiddleware>();
+
         // console-specific orchestrators
         services.AddScoped<Services.Console.ConsoleChatOrchestrator>();
-        services.AddScoped<ResponseWriter, ConsoleResponseWriter>();
+        services.AddScoped<ConsoleResponseWriter>();
         services.AddScoped<HttpResponseWriter>();
+        services.AddScoped<ResponseWriter>(sp => sp.GetRequiredService<HttpResponseWriter>());
 
         return services;
     }
 
+    private static string ModelInstructions =>
+"""
+You are Salus, a personal health assistant. Your role is to help users track symptoms,
+log health episodes, and generate assessments based on what they report.
+
+## Core responsibilities
+- Help users record and describe symptoms (name, severity, location, triggers, relievers)
+- Create and update episodes as a conversation about a symptom unfolds
+- Generate assessments when there is enough information to form a hypothesis
+- Retrieve past episodes or assessments when the user asks about their history
+
+## Tool usage guidelines
+- Call CreateSymptomWithEpisode as soon as a new symptom is clearly identified
+- Follow up with UpdateEpisode to fill in details gathered through conversation
+- Only call CreateAssessment when you have a reasonable hypothesis — do not rush it
+- Prefer gathering more detail before assessing rather than creating a low-confidence assessment immediately
+- If the user reports multiple symptoms, handle each one separately
+
+## Tone and style
+- Be concise and clinical, but warm and approachable
+- Ask one clarifying question at a time rather than listing many at once
+- Do not diagnose definitively — always frame assessments as hypotheses
+- Never recommend emergency care unless severity clearly warrants it
+- Do not offer general health advice outside the scope of what the user has reported
+""";
 
     private static AIAgent CreateMainAgentCallback(IServiceProvider sp, AiOptions aiOptions, AgentProvider provider)
     {
@@ -94,7 +123,7 @@ public static class AiConfiguration
             AgentProvider.Anthropic => ConstructAnthropicBaseChatClient(aiOptions,sp.GetRequiredService<IValidator<AnthropicOptions>>()),
         };
         var baseChatClient = chatClientBuilder
-            .Use(getResponseFunc: ChatClientMiddleware, getStreamingResponseFunc: ChatClientStreamingMiddleware)
+            .Use(getResponseFunc: AgentMiddleware.ChatClientMiddleware, getStreamingResponseFunc: AgentMiddleware.ChatClientStreamingMiddleware)
             .Build();
 
         var assessmentPlugin = sp.GetRequiredService<AssessmentPlugin>();
@@ -105,6 +134,9 @@ public static class AiConfiguration
         ];
 
         // "core" agent creation
+        var agentMiddleware = sp.GetRequiredService<AgentMiddleware>();
+        var responseWriter = sp.GetRequiredService<ResponseWriter>();
+
         return baseChatClient
             .AsAIAgent(new ChatClientAgentOptions
             {
@@ -113,14 +145,14 @@ public static class AiConfiguration
                 ChatOptions = new ChatOptions
                 {
                     ModelId = defaultModelName,
-                    Instructions = "You are a helpful assistant.",
+                    Instructions = ModelInstructions,
                     Tools = tools
                 },
                 ChatHistoryProviderFactory = (ctx, _) => new ValueTask<ChatHistoryProvider>(
-                    new DbChatHistoryProvider(serviceScopeFactory, ctx.SerializedState))
+                    new DbChatHistoryProvider(serviceScopeFactory, responseWriter, ctx.SerializedState))
             })
             .AsBuilder()
-            .Use(FunctionCallMiddleware)
+            .Use(agentMiddleware.FunctionCallMiddleware)
             .Build();
     }
 

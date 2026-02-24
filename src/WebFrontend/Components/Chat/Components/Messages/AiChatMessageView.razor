@@ -7,16 +7,25 @@
     {
         var component = Message.Components[i];
         var isLast = i == Message.Components.Count - 1;
-        @switch (component)
+        switch (component)
         {
             case ThinkingMessageComponent thinking:
                 <ThinkingMessageComponentView Component="@thinking" IsLast="@isLast" />
                 break;
             case WebSearchMessageComponent webSearch:
-                <WebSearchMessageComponentView Component="@webSearch" AccordionExpanded="false" />
+                <WebSearchMessageComponentView Comp22onent="@webSearch" AccordionExpanded="false" />
                 break;
             case TextMessageComponent text:
                 <TextMessageComponentView Component="@text" />
+                break;
+            case ToolCallMessageComponent toolCall:
+                <ToolCallMessageComponentView Component="@toolCall" />
+                break;
+            case SymptomCreatedMessageComponent symptomCreated:
+                <SymptomCreatedMessageComponentView Component="@symptomCreated" />
+                break;
+            case UnknownMessageComponent unknown when ChatComponentState.ShowUnknownTags:
+                <UnknownMessageComponentView Component="@unknown" />
                 break;
         }
     }
@@ -26,4 +35,7 @@
 {
     [Parameter]
     public required AiChatMessage Message { get; set; }
+
+    [CascadingParameter(Name = nameof(ChatComponentState))]
+    public ChatComponentState ChatComponentState { get; set; } = new();
 }
