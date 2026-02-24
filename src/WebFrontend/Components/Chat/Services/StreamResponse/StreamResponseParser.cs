@@ -8,9 +8,8 @@ namespace WebFrontend.Components.Chat.Services.StreamResponse;
 public class StreamResponseParser(IList<MessageComponent> components, JsonSerializerOptions jsonOptions) : IStreamResponseParser
 {
     private readonly StringBuilder _buffer = new();
-    private ParseMode _mode = ParseMode.None;
     private MessageComponent? _activeComponent;
-    private string? _unknownTagName;
+    private string? _activeType;
 
     public void AppendChunk(string chunk)
     {
@@ -18,136 +17,121 @@ public class StreamResponseParser(IList<MessageComponent> components, JsonSerial
             return;
 
         _buffer.Append(chunk);
+        var text = _buffer.ToString();
+        var lines = text.Split('\n');
 
-        var processedUpTo = 0;
+        // All complete lines (all but the last incomplete fragment)
+        for (var i = 0; i < lines.Length - 1; i++)
+            ProcessLine(lines[i].Trim());
 
-        while (processedUpTo < _buffer.Length)
+        // Keep the incomplete last fragment in buffer
+        _buffer.Clear();
+        _buffer.Append(lines[^1]);
+    }
+
+    private void ProcessLine(string line)
+    {
+        if (string.IsNullOrEmpty(line)) return;
+
+        try
         {
-            var tagStart = FindNextUnescapedChar(_buffer, '<', processedUpTo);
+            var doc = JsonDocument.Parse(line);
+            var root = doc.RootElement;
 
-            if (tagStart < 0)
+            if (!root.TryGetProperty("type", out var typeEl)) return;
+            var type = typeEl.GetString();
+
+            switch (type)
             {
-                var keepTrailingEscape = _buffer[^1] == '\\';
-                AppendTextIfInMode(_buffer, processedUpTo, _buffer.Length - processedUpTo, keepTrailingEscape);
-                processedUpTo = keepTrailingEscape ? _buffer.Length - 1 : _buffer.Length;
-                break;
+                case "text":
+                    AppendTextContent(type, root, () => new TextMessageComponent { Content = string.Empty },
+                        c => ((TextMessageComponent)c).Content,
+                        (c, v) => ((TextMessageComponent)c).Content = v);
+                    break;
+
+                case "reasoning":
+                    AppendTextContent(type, root, () => new ThinkingMessageComponent { Content = string.Empty },
+                        c => ((ThinkingMessageComponent)c).Content,
+                        (c, v) => ((ThinkingMessageComponent)c).Content = v);
+                    break;
+
+                case "search":
+                    AppendTextContent(type, root, () => new WebSearchMessageComponent { Content = string.Empty },
+                        c => ((WebSearchMessageComponent)c).Content,
+                        (c, v) => ((WebSearchMessageComponent)c).Content = v);
+                    break;
+
+                case "tool_call":
+                    var name = root.TryGetProperty("name", out var nameEl) ? nameEl.GetString() ?? string.Empty : string.Empty;
+                    FinalizeActiveComponent();
+                    var tc = new ToolCallMessageComponent { FunctionName = name };
+                    components.Add(tc);
+                    _activeType = null;
+                    _activeComponent = null;
+                    break;
+
+                case "symptom_created":
+                    FinalizeActiveComponent();
+                    var sc = new SymptomCreatedMessageComponent { RawJson = string.Empty };
+                    if (root.TryGetProperty("data", out var scData))
+                    {
+                        sc.RawJson = scData.GetRawText();
+                        ParseSymptomCreatedJson(sc);
+                    }
+                    components.Add(sc);
+                    _activeType = null;
+                    _activeComponent = null;
+                    break;
+
+                case "assessment_created":
+                    FinalizeActiveComponent();
+                    var ac = new AssessmentCreatedMessageComponent { RawJson = string.Empty };
+                    if (root.TryGetProperty("data", out var acData))
+                    {
+                        ac.RawJson = acData.GetRawText();
+                        ParseAssessmentCreatedJson(ac);
+                    }
+                    components.Add(ac);
+                    _activeType = null;
+                    _activeComponent = null;
+                    break;
             }
-
-            if (_mode != ParseMode.None && tagStart > processedUpTo)
-            {
-                AppendTextIfInMode(_buffer, processedUpTo, tagStart - processedUpTo, keepTrailingEscape: false);
-            }
-
-            var tagEnd = FindNextUnescapedChar(_buffer, '>', tagStart + 1);
-            if (tagEnd < 0)
-            {
-                processedUpTo = tagStart;
-                break;
-            }
-
-            var tagToken = _buffer.ToString(tagStart + 1, tagEnd - tagStart - 1).Trim();
-            ProcessTag(tagToken);
-
-            processedUpTo = tagEnd + 1;
         }
-
-        if (processedUpTo > 0)
-            _buffer.Remove(0, processedUpTo);
+        catch { /* ignore malformed lines */ }
     }
 
-    private void ProcessTag(string tagToken)
+    private void AppendTextContent(
+        string type,
+        JsonElement root,
+        Func<MessageComponent> create,
+        Func<MessageComponent, string> getContent,
+        Action<MessageComponent, string> setContent)
     {
-        if (string.IsNullOrWhiteSpace(tagToken))
-            return;
+        var content = root.TryGetProperty("content", out var el) ? el.GetString() ?? string.Empty : string.Empty;
 
-        if (IsEndTag(tagToken, "thinking") || IsEndTag(tagToken, "reasoning") || IsEndTag(tagToken, "search") || IsEndTag(tagToken, "text") || IsEndTag(tagToken, "toolcall") || IsEndTag(tagToken, "symptomcreated") || IsEndTag(tagToken, "assessmentcreated"))
+        if (_activeType == type && _activeComponent != null)
         {
-            ResetMode();
-            return;
+            setContent(_activeComponent, getContent(_activeComponent) + content);
         }
-
-        if (IsStartTag(tagToken, "thinking") || IsStartTag(tagToken, "reasoning"))
+        else
         {
-            SetMode(ParseMode.Thinking);
-            return;
-        }
-
-        if (IsStartTag(tagToken, "search"))
-        {
-            SetMode(ParseMode.Search);
-            return;
-        }
-
-        if (IsStartTag(tagToken, "text"))
-        {
-            SetMode(ParseMode.Text);
-            return;
-        }
-
-        if (IsStartTag(tagToken, "toolcall"))
-        {
-            SetMode(ParseMode.ToolCall);
-            return;
-        }
-
-        if (IsStartTag(tagToken, "symptomcreated"))
-        {
-            SetMode(ParseMode.SymptomCreated);
-            return;
-        }
-
-        if (IsStartTag(tagToken, "assessmentcreated"))
-        {
-            SetMode(ParseMode.AssessmentCreated);
-            return;
-        }
-
-        // Unknown tag handling
-        if (!tagToken.StartsWith('/'))
-        {
-            SetModeUnknown(tagToken);
-        }
-        else if (_mode == ParseMode.Unknown && IsEndTag(tagToken, _unknownTagName!))
-        {
-            ResetMode();
+            FinalizeActiveComponent();
+            var component = create();
+            setContent(component, content);
+            _activeType = type;
+            _activeComponent = component;
+            components.Add(component);
         }
     }
 
-    private void SetModeUnknown(string tagName)
+    private void FinalizeActiveComponent()
     {
-        _unknownTagName = tagName;
-        SetMode(ParseMode.Unknown);
-    }
-
-    private void SetMode(ParseMode mode)
-    {
-        _mode = mode;
-        _activeComponent = CreateComponent(mode);
-        components.Add(_activeComponent);
-    }
-
-    private void ResetMode()
-    {
-        if (_mode == ParseMode.Thinking && _activeComponent is ThinkingMessageComponent thinking)
+        if (_activeComponent is ThinkingMessageComponent thinking && thinking.ThinkingTime == 0)
         {
             var rand = new Random();
             const int min = 5, max = 10;
             thinking.ThinkingTime = rand.Next(min, max + 1);
         }
-
-        if (_mode == ParseMode.SymptomCreated && _activeComponent is SymptomCreatedMessageComponent sc)
-        {
-            ParseSymptomCreatedJson(sc);
-        }
-
-        if (_mode == ParseMode.AssessmentCreated && _activeComponent is AssessmentCreatedMessageComponent ac)
-        {
-            ParseAssessmentCreatedJson(ac);
-        }
-
-        _mode = ParseMode.None;
-        _activeComponent = null;
-        _unknownTagName = null;
     }
 
     private void ParseAssessmentCreatedJson(AssessmentCreatedMessageComponent component)
@@ -158,121 +142,5 @@ public class StreamResponseParser(IList<MessageComponent> components, JsonSerial
     private void ParseSymptomCreatedJson(SymptomCreatedMessageComponent component)
     {
         try { component.Status = JsonSerializer.Deserialize<SymptomCreatedStatus>(component.RawJson, jsonOptions); } catch { }
-    }
-
-    private MessageComponent CreateComponent(ParseMode mode)
-    {
-        return mode switch
-        {
-            ParseMode.Thinking => new ThinkingMessageComponent { Content = string.Empty },
-            ParseMode.Search => new WebSearchMessageComponent { Content = string.Empty },
-            ParseMode.Text => new TextMessageComponent { Content = string.Empty },
-            ParseMode.ToolCall => new ToolCallMessageComponent { FunctionName = string.Empty },
-            ParseMode.SymptomCreated => new SymptomCreatedMessageComponent { RawJson = string.Empty },
-            ParseMode.AssessmentCreated => new AssessmentCreatedMessageComponent { RawJson = string.Empty },
-            ParseMode.Unknown => new UnknownMessageComponent { TagName = _unknownTagName!, Content = string.Empty },
-            _ => throw new InvalidOperationException("Cannot create component for None mode.")
-        };
-    }
-
-    private void AppendTextIfInMode(StringBuilder buffer, int start, int length, bool keepTrailingEscape)
-    {
-        if (_mode == ParseMode.None || _activeComponent is null || length <= 0)
-            return;
-
-        var appendLength = length;
-        if (keepTrailingEscape && buffer[start + length - 1] == '\\')
-            appendLength -= 1;
-
-        if (appendLength <= 0)
-            return;
-
-        var segment = buffer.ToString(start, appendLength);
-        var normalized = UnescapeForContent(segment);
-
-        AppendToComponent(_activeComponent, normalized);
-    }
-
-    private static void AppendToComponent(MessageComponent component, string content)
-    {
-        if (string.IsNullOrEmpty(content))
-            return;
-
-        switch (component)
-        {
-            case ThinkingMessageComponent thinking:
-                thinking.Content += content;
-                break;
-            case WebSearchMessageComponent webSearch:
-                webSearch.Content += content;
-                break;
-            case TextMessageComponent text:
-                text.Content += content;
-                break;
-            case ToolCallMessageComponent toolCall:
-                toolCall.FunctionName += content;
-                break;
-            case SymptomCreatedMessageComponent symptomCreated:
-                symptomCreated.RawJson += content;
-                break;
-            case AssessmentCreatedMessageComponent assessmentCreated:
-                assessmentCreated.RawJson += content;
-                break;
-            case UnknownMessageComponent unknown:
-                unknown.Content += content;
-                break;
-        }
-    }
-
-    private static string UnescapeForContent(string value)
-    {
-        if (string.IsNullOrEmpty(value))
-            return value;
-
-        return value
-            .Replace("\\\\", "\\")
-            .Replace("\\<", "<")
-            .Replace("\\>", ">");
-    }
-
-    private static bool IsStartTag(string tagToken, string name)
-        => tagToken.Equals(name, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsEndTag(string tagToken, string name)
-        => tagToken.Equals("/" + name, StringComparison.OrdinalIgnoreCase);
-
-    private static int FindNextUnescapedChar(StringBuilder buffer, char target, int startIndex)
-    {
-        for (var i = startIndex; i < buffer.Length; i++)
-        {
-            if (buffer[i] != target)
-                continue;
-
-            if (!IsEscaped(buffer, i))
-                return i;
-        }
-
-        return -1;
-    }
-
-    private static bool IsEscaped(StringBuilder buffer, int index)
-    {
-        var backslashCount = 0;
-        for (var i = index - 1; i >= 0 && buffer[i] == '\\'; i--)
-            backslashCount++;
-
-        return backslashCount % 2 == 1;
-    }
-
-    private enum ParseMode
-    {
-        None,
-        Thinking,
-        Search,
-        Text,
-        ToolCall,
-        SymptomCreated,
-        AssessmentCreated,
-        Unknown
     }
 }

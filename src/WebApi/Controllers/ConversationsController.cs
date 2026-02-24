@@ -89,7 +89,7 @@ public class ConversationsController(
                     role = x.message.Role.ToString().ToLower(),
                     content = x.message.Role == ChatRole.User
                         ? string.Join(" ", x.message.Contents.OfType<TextContent>().Select(tc => tc.Text))
-                        : FormatAsTagged(x.message, x.entity.EmittedTags)
+                        : FormatAsNdjson(x.message, x.entity.EmittedTags)
                 }).ToList();
 
             var conversation = new
@@ -163,39 +163,30 @@ public class ConversationsController(
         }
     }
 
-    private string FormatAsTagged(ChatMessage message, string? emittedTags = null)
+    private string FormatAsNdjson(ChatMessage message, string? emittedTags = null)
     {
         var sb = new StringBuilder();
 
-        // Prepend out-of-band tags verbatim — they were emitted before the assistant text during the live
-        // response and must appear first, without going through the formatter (which would wrap them in <Text>).
+        // Prepend out-of-band NDJSON lines verbatim (SymptomCreated, AssessmentCreated, ToolCall events).
         if (!string.IsNullOrEmpty(emittedTags))
             sb.Append(emittedTags);
-
-        ContentCategory? current = null;
 
         foreach (var chunk in messageFormatter.FormatMessage(message))
         {
             if (MessageFormatter.ShouldSkip(chunk.Category))
                 continue;
 
-            if (current is null)
+            var type = chunk.Category switch
             {
-                current = chunk.Category;
-                sb.Append($"<{chunk.Category}>\n");
-            }
-            else if (chunk.Category != current)
-            {
-                sb.Append($"\n</{current}>\n\n");
-                current = chunk.Category;
-                sb.Append($"<{chunk.Category}>\n");
-            }
+                ContentCategory.Text => "text",
+                ContentCategory.Reasoning => "reasoning",
+                ContentCategory.Usage => "usage",
+                _ => "unknown"
+            };
 
-            sb.Append(chunk.Text);
+            var escaped = JsonSerializer.Serialize(chunk.Text);
+            sb.Append($"{{\"type\":\"{type}\",\"content\":{escaped}}}\n");
         }
-
-        if (current is not null)
-            sb.Append($"\n</{current}>");
 
         return sb.ToString();
     }

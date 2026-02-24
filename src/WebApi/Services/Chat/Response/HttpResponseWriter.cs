@@ -1,10 +1,11 @@
+using System.Text.Json;
 using WebApi.Services.Chat.Formatters;
 
 namespace WebApi.Services.Chat.Response;
 
 /// <summary>
 /// HTTP streaming implementation of ResponseWriter.
-/// Mirrors ConsoleResponseWriter output exactly, writing to the HTTP response body instead of stdout.
+/// Writes NDJSON lines to the HTTP response body.
 /// </summary>
 public class HttpResponseWriter(MessageFormatter formatter, IHttpContextAccessor httpContextAccessor)
     : ResponseWriter(formatter)
@@ -19,16 +20,16 @@ public class HttpResponseWriter(MessageFormatter formatter, IHttpContextAccessor
 
     protected override async Task WriteCoreAsync(FormattedContent content, CancellationToken cancellationToken)
     {
-        switch (content.Category)
+        var type = content.Category switch
         {
-            case ContentCategory.ToolResult:
-                break;
+            ContentCategory.Text => "text",
+            ContentCategory.Reasoning => "reasoning",
+            ContentCategory.Usage => "usage",
+            _ => "unknown"
+        };
 
-            default:
-                await Response.WriteAsync(content.Text, cancellationToken);
-                await Response.Body.FlushAsync(cancellationToken);
-                break;
-        }
+        var escaped = JsonSerializer.Serialize(content.Text);
+        await WriteRawAsync($"{{\"type\":\"{type}\",\"content\":{escaped}}}\n", cancellationToken);
     }
 
     protected override async Task CompleteCoreAsync(CancellationToken cancellationToken)
