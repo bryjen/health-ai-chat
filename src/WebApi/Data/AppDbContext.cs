@@ -1,16 +1,29 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.Extensions.Configuration;
-using Pgvector;
-using Pgvector.EntityFrameworkCore;
 using WebApi.Models;
+using WebApi.Models.EfCore.Chat;
 
 namespace WebApi.Data;
 
-public class AppDbContext(
-    DbContextOptions<AppDbContext> options)
-    : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    // Chat entities (from non-obsolete - prioritized)
+    public DbSet<ChatMessageEntity> ChatMessages => Set<ChatMessageEntity>();
+    public DbSet<SessionEntity> Sessions => Set<SessionEntity>();
+
+    // Other entities (from obsolete)
+    public DbSet<User> Users { get; set; }
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<PasswordResetRequest> PasswordResetRequests { get; set; }
+    public DbSet<Conversation> Conversations { get; set; }
+    public DbSet<Message> Messages { get; set; }
+    public DbSet<Symptom> Symptoms { get; set; }
+    public DbSet<Episode> Episodes { get; set; }
+    public DbSet<Assessment> Assessments { get; set; }
+    public DbSet<AssessmentEpisodeLink> AssessmentEpisodeLinks { get; set; }
+    public DbSet<Appointment> Appointments { get; set; }
+
     /// <summary>
     /// Fallback configuration for design-time scenarios when options aren't provided via DI.
     /// In runtime, options are configured via ServiceConfiguration.ConfigureDatabase().
@@ -31,26 +44,10 @@ public class AppDbContext(
 
             if (!string.IsNullOrWhiteSpace(connectionString))
             {
-                optionsBuilder.UseNpgsql(connectionString, npgsqlOptions =>
-                {
-                    npgsqlOptions.UseVector(); // Required for Vector type mapping
-                });
+                optionsBuilder.UseNpgsql(connectionString);
             }
         }
     }
-
-    public DbSet<User> Users { get; set; }
-    public DbSet<RefreshToken> RefreshTokens { get; set; }
-    public DbSet<PasswordResetRequest> PasswordResetRequests { get; set; }
-    public DbSet<Conversation> Conversations { get; set; }
-    public DbSet<Message> Messages { get; set; }
-    public DbSet<Symptom> Symptoms { get; set; }
-    public DbSet<Episode> Episodes { get; set; }
-    public DbSet<NegativeFinding> NegativeFindings { get; set; }
-    public DbSet<Assessment> Assessments { get; set; }
-    public DbSet<AssessmentEpisodeLink> AssessmentEpisodeLinks { get; set; }
-    public DbSet<Appointment> Appointments { get; set; }
-    public DbSet<MessageEmbedding> MessageEmbeddings { get; set; }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
@@ -98,13 +95,29 @@ public class AppDbContext(
     {
         base.OnModelCreating(modelBuilder);
 
-        // sets the default schema for PostgreSQL
+        // Sets the default schema for PostgreSQL
+        // Using "conuhacks" for main entities, chat entities will use "test_schema" explicitly
         modelBuilder.HasDefaultSchema("conuhacks");
 
-        // Configure Vector type mapping for pgvector
-        // This ensures EF Core recognizes Vector as mappable to vector type
-        modelBuilder.HasPostgresExtension("vector");
+        // Chat entities (from non-obsolete - prioritized, using test_schema)
+        modelBuilder.Entity<ChatMessageEntity>(entity =>
+        {
+            entity.ToTable("ChatMessages", "test_schema");
+            entity.HasKey(e => e.Key);
+            entity.Property(e => e.Key).HasMaxLength(256);
+            entity.Property(e => e.SessionId).HasMaxLength(256);
+            entity.HasIndex(e => e.SessionId);
+        });
 
+        modelBuilder.Entity<SessionEntity>(entity =>
+        {
+            entity.ToTable("Sessions", "test_schema");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasMaxLength(64);
+            entity.Property(e => e.SerializedState).IsRequired();
+        });
+
+        // Other entities (from obsolete, using conuhacks schema)
         modelBuilder.Entity<User>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -130,6 +143,7 @@ public class AppDbContext(
             entity.Property(e => e.Address).HasMaxLength(255);
             entity.Property(e => e.City).HasMaxLength(100);
             entity.Property(e => e.PostalCode).HasMaxLength(20);
+
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
 
@@ -301,28 +315,6 @@ public class AppDbContext(
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<NegativeFinding>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).ValueGeneratedOnAdd(); // Auto-increment
-
-            entity.Property(e => e.SymptomName).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.ReportedAt).IsRequired().HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-            entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => e.EpisodeId);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Episode)
-                .WithMany()
-                .HasForeignKey(e => e.EpisodeId)
-                .OnDelete(DeleteBehavior.SetNull);
-        });
-
         modelBuilder.Entity<Assessment>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -343,17 +335,6 @@ public class AppDbContext(
                     v => v == null
                         ? null
                         : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v,
-                            (System.Text.Json.JsonSerializerOptions?)null));
-
-            entity.Property(e => e.NegativeFindingIds)
-                .HasColumnType("jsonb")
-                .HasConversion(
-                    v => v == null
-                        ? null
-                        : System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                    v => v == null
-                        ? null
-                        : System.Text.Json.JsonSerializer.Deserialize<List<int>>(v,
                             (System.Text.Json.JsonSerializerOptions?)null));
 
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
@@ -417,32 +398,5 @@ public class AppDbContext(
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
-
-        modelBuilder.Entity<MessageEmbedding>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-
-            // Configure vector column - UseVector() extension handles Vector type mapping automatically
-            // Specify dimension constraint for vector(1536) - text-embedding-3-small
-            entity.Property(e => e.Embedding)
-                .HasColumnType("vector(1536)")
-                .IsRequired();
-
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
-
-            entity.HasIndex(e => e.MessageId).IsUnique();
-            entity.HasIndex(e => e.UserId);
-
-            entity.HasOne(e => e.Message)
-                .WithMany()
-                .HasForeignKey(e => e.MessageId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
     }
 }
-

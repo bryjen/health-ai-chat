@@ -4,9 +4,12 @@ using Web.Common.DTOs;
 using Web.Common.DTOs.Health;
 using WebApi.Controllers.Utils;
 using WebApi.Data;
-using WebApi.Repositories;
+using WebApi.Services.Data;
 
 namespace WebApi.Controllers;
+
+// disabled to avoid no xml docs on injected services as parameters
+#pragma warning disable CS1573 // Parameter has no matching param tag in the XML comment (but other parameters do)
 
 /// <summary>
 /// Handles episode-related endpoints for symptom tracking.
@@ -27,12 +30,12 @@ public class EpisodesController : BaseController
     [ProducesResponseType(typeof(List<EpisodeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<EpisodeDto>>> GetActiveEpisodes(
-        [FromServices] EpisodeRepository episodeRepository,
+        [FromServices] EpisodeService episodeService,
         [FromServices] AppDbContext context,
         [FromQuery] int days = 14)
     {
         var userId = GetUserId();
-        var episodes = await episodeRepository.GetActiveEpisodesAsync(userId, days);
+        var episodes = await episodeService.GetActiveEpisodesAsync(userId, days);
 
         var episodeDtos = episodes.Select(e => new EpisodeDto
         {
@@ -70,11 +73,11 @@ public class EpisodesController : BaseController
     [ProducesResponseType(typeof(List<EpisodeDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<EpisodeDto>>> GetEpisodesBySymptom(
-        [FromRoute] string symptomName,
-        [FromServices] EpisodeRepository episodeRepository)
+        [FromServices] EpisodeService episodeService,
+        [FromRoute] string symptomName)
     {
         var userId = GetUserId();
-        var episodes = await episodeRepository.GetEpisodesBySymptomAsync(userId, symptomName);
+        var episodes = await episodeService.GetEpisodesBySymptomAsync(userId, symptomName);
 
         var episodeDtos = episodes.Select(e => new EpisodeDto
         {
@@ -118,11 +121,11 @@ public class EpisodesController : BaseController
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<EpisodeDto>> GetEpisode(
-        [FromRoute] int episodeId,
-        [FromServices] EpisodeRepository episodeRepository)
+        [FromServices] EpisodeService episodeService,
+        [FromRoute] int episodeId)
     {
         var userId = GetUserId();
-        var episode = await episodeRepository.GetEpisodeAsync(episodeId);
+        var episode = await episodeService.GetEpisodeAsync(episodeId);
 
         if (episode == null || episode.UserId != userId)
         {

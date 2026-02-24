@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Web.Common.DTOs;
 using Web.Common.DTOs.Health;
 using WebApi.Controllers.Utils;
-using WebApi.Repositories;
+using WebApi.Services.Data;
 
 namespace WebApi.Controllers;
 
@@ -24,10 +24,10 @@ public class SymptomsController : BaseController
     [ProducesResponseType(typeof(List<SymptomDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<SymptomDto>>> GetSymptoms(
-        [FromServices] SymptomRepository symptomRepository)
+        [FromServices] SymptomService symptomService)
     {
         var userId = GetUserId();
-        var symptoms = await symptomRepository.GetSymptomsWithEpisodeCountAsync(userId);
+        var symptoms = await symptomService.GetSymptomsWithEpisodeCountAsync(userId);
 
         var symptomDtos = symptoms.Select(s => new SymptomDto
         {

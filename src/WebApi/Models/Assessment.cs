@@ -17,9 +17,6 @@ public class Assessment
     public required string Reasoning { get; set; }
     public required string RecommendedAction { get; set; } // "self-care", "see-gp", "urgent-care", "emergency"
 
-    // Links (stored as JSON arrays of IDs)
-    public List<int>? NegativeFindingIds { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     // Navigation properties

@@ -1,26 +1,16 @@
 using Microsoft.Agents.AI.DevUI;
-using Microsoft.Agents.AI.Hosting;
 using Microsoft.EntityFrameworkCore;
 using WebApi.Configuration;
 using WebApi.Data;
 using WebApi.Middleware;
-using WebApi.Repositories;
-using WebApi.Services.AI.Scenarios;
-using WebApi.Services.Chat;
-using WebApi.Services.Chat.Conversations;
-using WebApi.Services.VectorStore;
 
 var builder = WebApplication.CreateBuilder(args);
-
 builder.Services
     .AddControllers()
     .AddJsonOptions(ServiceConfiguration.ConfigureJsonCallback);
-
 builder.Services
     .AddHealthChecks()
     .AddDbContextCheck<AppDbContext>();
-
-builder.AddDevUI();
 
 var corsEnabled = builder.Services.ConfigureCors(builder.Configuration);
 builder.Services.ConfigureAppOptions(builder.Configuration);
@@ -31,37 +21,15 @@ builder.Services.AddDataProtection();
 builder.Services.ConfigureJwtAuth(builder.Configuration, builder.Environment);
 builder.Services.ConfigureRateLimiting(builder.Configuration);
 builder.Services.ConfigureRequestLimits(builder.Configuration);
-builder.Services.ConfigureResponseCompression(builder.Environment);
-builder.Services.ConfigureResponseCaching(builder.Environment);
-builder.Services.ConfigureOpenTelemetry(builder.Configuration, builder.Logging, builder.Environment);
+// builder.Services.ConfigureResponseCompression(builder.Environment);
+// builder.Services.ConfigureResponseCaching(builder.Environment);
 builder.Services.ConfigureAuthServices(builder.Configuration);
-var agentBuilders = builder.ConfigureAi();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ConversationService>();
 
-// Register location service as singleton for caching
-builder.Services.AddSingleton<WebApi.Services.Location.LocationService>();
+builder.WebHost.ConfigureKestrel(o => o.AllowSynchronousIO = true);
 
-// Health chat repositories
-builder.Services.AddScoped<SymptomRepository>();
-builder.Services.AddScoped<EpisodeRepository>();
-builder.Services.AddScoped<AssessmentRepository>();
-builder.Services.AddScoped<NegativeFindingRepository>();
-builder.Services.AddScoped<AppointmentRepository>();
-builder.Services.AddScoped<VectorStoreRepository>();
-
-// Health chat services
-builder.Services.AddScoped<VectorStoreService>();
-builder.Services.AddScoped<ConversationContextService>();
-builder.Services.AddScoped<HealthChatScenario>();
-builder.Services.AddScoped<ResponseRouterService>();
-builder.Services.AddScoped<StatusInformationSerializer>();
-builder.Services.AddScoped<EntityChangeTracker>();
-builder.Services.AddScoped<HealthChatOrchestrator>();
-builder.Services.AddScoped<WebApi.Services.Graph.GraphDataService>();
-
-// SignalR
-builder.Services.AddSignalR();
+// ai shit
+builder.Services.ConfigureCoreAiAgents(builder.Configuration);
 
 var app = builder.Build();
 
@@ -69,10 +37,12 @@ var app = builder.Build();
 ValidateConfigurationOnStartup(app.Services, app.Environment, app.Logger);
 
 // request/response logging, must be before GlobalExceptionHandlerMiddleware so it can capture error responses
-app.UseMiddleware<RequestLoggingMiddleware>();
+// DISABLED: Buffers entire response, breaks streaming
+// app.UseMiddleware<RequestLoggingMiddleware>();
 
 // global unhandled exception handling (should be early in pipeline, after logging)
-app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+// DISABLED: Buffers response, breaks streaming
+// app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
 // middleware for security response security headers
 app.UseMiddleware<SecurityHeadersMiddleware>();
@@ -81,7 +51,7 @@ app.UseRateLimiter();
 
 if (app.Environment.IsProduction())
 {
-    app.UseResponseCompression();
+    // app.UseResponseCompression();
 }
 
 // Serve OpenAPI JSON spec for Scalar UI
@@ -91,16 +61,15 @@ app.UseSwagger();
 
 if (app.Environment.IsProduction())
 {
-    app.UseHttpsRedirection();
+    // app.UseHttpsRedirection();
 }
-
 
 // Routing must come before response caching
 app.UseRouting();
 
 if (app.Environment.IsProduction())
 {
-    app.UseResponseCaching();
+    // app.UseResponseCaching();
 }
 
 if (corsEnabled)
@@ -114,19 +83,6 @@ app.UseAuthorization();
 app.ConfigureScalarDocs();
 
 app.MapControllers();
-
-app.MapDevUI();
-
-// Map agent endpoints for DevUI and API access
-app.MapOpenAIChatCompletions(agentBuilders.HealthChatAgent);
-app.MapOpenAIChatCompletions(agentBuilders.AssessmentWorkflowAgent);
-app.MapOpenAIChatCompletions(agentBuilders.SymptomTrackingWorkflowAgent);
-
-// Map agent discovery endpoint for DevUI
-app.MapAgentDiscovery("/agents");
-
-// SignalR hub
-app.MapHub<WebApi.Hubs.ChatHub>("/hubs/chat");
 
 // Health check endpoint
 app.MapHealthChecks("/health");

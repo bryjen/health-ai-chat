@@ -1,146 +1,202 @@
+using Anthropic;
+using Anthropic.Core;
+using Anthropic.Models.Messages;
 using Azure;
 using Azure.AI.OpenAI;
+using FluentValidation;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
-using Microsoft.Agents.AI.OpenAI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using WebApi.Configuration.Options;
-using WebApi.Services.AI.Tools;
-using WebApi.Services.AI.Workflows;
+using WebApi.Services;
+using WebApi.Services.Chat;
+using WebApi.Services.Chat.Formatters;
+using WebApi.Services.Chat.HistoryProviders;
+using WebApi.Services.Chat.Plugins;
+using WebApi.Services.Chat.Response;
+using WebApi.Services.Data;
+using static WebApi.Services.Chat.Middleware.AgentMiddleware;
+
+using MessageCreateParams = Anthropic.Models.Messages.MessageCreateParams;
+using Converter = WebApi.Configuration.AgentProviderConverter;
+
+// ReSharper disable UnusedMethodReturnValue.Global
+#pragma warning disable CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.
+#pragma warning disable OPENAI001
+#pragma warning disable MEAI001
 
 namespace WebApi.Configuration;
 
 public static class AiConfiguration
 {
     /// <summary>
-    /// Result containing agent builders that need to be mapped as HTTP endpoints.
+    /// Registers AI services, agents, and chat orchestration components.
     /// </summary>
-    public class AgentBuildersResult
+    /// <remarks>
+    /// Registers the following services (as of 2026/02/06):
+    /// <list type="bullet">
+    /// <item><description>AI agent plugins (AssessmentPlugin, SymptomPlugin)</description></item>
+    /// <item><description>Keyed AI agents for Microsoft Foundry and Anthropic providers</description></item>
+    /// <item><description>Core chat services (MessageFormatter, SessionManager, ChatService)</description></item>
+    /// <item><description>Console-specific services (ConsoleChatOrchestrator, ConsoleResponseWriter)</description></item>
+    /// </list>
+    /// </remarks>
+    public static IServiceCollection ConfigureCoreAiAgents(
+        this IServiceCollection services,
+        IConfiguration configuration)
     {
-        public IHostedAgentBuilder HealthChatAgent { get; set; } = null!;
-        public IHostedAgentBuilder AssessmentWorkflowAgent { get; set; } = null!;
-        public IHostedAgentBuilder SymptomTrackingWorkflowAgent { get; set; } = null!;
+        var aiOptions = configuration.GetSection(AiOptions.SectionName).Get<AiOptions>()
+                        ?? throw new InvalidOperationException("Failed to bind AiOptions from configuration.");
+
+        services.AddScoped<AssessmentPlugin>();
+        services.AddScoped<SymptomTrackerPlugin>();
+
+        // agents
+        // scoped registration to allow for scoped-data. overhead of agent creation deemed to be a non-issue here.
+        services.AddKeyedScoped<AIAgent>(Converter.ToStringValue(AgentProvider.Anthropic), (sp, _)
+            => CreateMainAgentCallback(sp, aiOptions, AgentProvider.Anthropic));
+        services.AddKeyedScoped<AIAgent>(Converter.ToStringValue(AgentProvider.MicrosoftFoundry), (sp, _)
+            => CreateMainAgentCallback(sp, aiOptions, AgentProvider.MicrosoftFoundry));
+        services.AddScoped<AIAgent>(sp => sp.GetKeyedService<AIAgent>(Converter.ToStringValue(AgentProvider.Anthropic))
+                                          ?? throw new InvalidOperationException());
+
+        // core services, no ui dependencies
+        services.AddSingleton<MessageFormatter>();
+        services.AddScoped<SessionManager>();
+        services.AddScoped<ChatService>();
+
+        services.AddScoped<AiState>();
+        services.AddScoped<AppointmentService>();
+        services.AddScoped<AssessmentService>();
+        services.AddScoped<EpisodeService>();
+        services.AddScoped<SymptomService>();
+
+        // console-specific orchestrators
+        services.AddScoped<Services.Console.ConsoleChatOrchestrator>();
+        services.AddScoped<ResponseWriter, ConsoleResponseWriter>();
+        services.AddScoped<HttpResponseWriter>();
+
+        return services;
     }
 
-    /// <summary>
-    /// Configures AI-related services for Agent Framework using Microsoft.Agents.AI.OpenAI.
-    /// This overload uses IHostApplicationBuilder to register keyed chat clients for agent discovery.
-    /// Misconfiguration of Azure OpenAI will throw and fail fast.
-    /// </summary>
-    /// <returns>Agent builders that need to be mapped as HTTP endpoints.</returns>
-    public static AgentBuildersResult ConfigureAi(this IHostApplicationBuilder builder)
+
+    private static AIAgent CreateMainAgentCallback(IServiceProvider sp, AiOptions aiOptions, AgentProvider provider)
     {
-        // Validate configuration first
-        builder.Services.AddOptions<AzureOpenAiSettings>()
-            .BindConfiguration(AzureOpenAiSettings.SectionName)
-            .Validate(settings =>
+        var serviceScopeFactory = sp.GetRequiredService<IServiceScopeFactory>();
+        var defaultModelName = provider switch
+        {
+            AgentProvider.MicrosoftFoundry => aiOptions.MicrosoftFoundry.ModelDeploymentName,
+            AgentProvider.Anthropic => aiOptions.Anthropic.DefaultModel,
+        };
+        var chatClientBuilder = provider switch
+        {
+            AgentProvider.MicrosoftFoundry => ConstructFoundryBaseChatClient(aiOptions,sp.GetRequiredService<IValidator<MicrosoftFoundryOptions>>()),
+            AgentProvider.Anthropic => ConstructAnthropicBaseChatClient(aiOptions,sp.GetRequiredService<IValidator<AnthropicOptions>>()),
+        };
+        var baseChatClient = chatClientBuilder
+            .Use(getResponseFunc: ChatClientMiddleware, getStreamingResponseFunc: ChatClientStreamingMiddleware)
+            .Build();
+
+        var assessmentPlugin = sp.GetRequiredService<AssessmentPlugin>();
+        var symptomTrackerPlugin = sp.GetRequiredService<SymptomTrackerPlugin>();
+        IList<AITool> tools = [
+            .. assessmentPlugin.AsAiTools(),
+            .. symptomTrackerPlugin.AsAiTools()
+        ];
+
+        // "core" agent creation
+        return baseChatClient
+            .AsAIAgent(new ChatClientAgentOptions
             {
-                if (string.IsNullOrWhiteSpace(settings.Endpoint) ||
-                    string.IsNullOrWhiteSpace(settings.DeploymentName) ||
-                    string.IsNullOrWhiteSpace(settings.ApiKey))
+                Name = Converter.ToStringValue(provider),
+                Description = $"Primary agent for handling user interactions, powered by `{provider}`.",
+                ChatOptions = new ChatOptions
                 {
-                    throw new InvalidOperationException(
-                        "Azure OpenAI is not properly configured. " +
-                        "Please set 'AzureOpenAI:Endpoint', 'AzureOpenAI:ApiKey', and 'AzureOpenAI:DeploymentName' in configuration.");
-                }
-                return true;
+                    ModelId = defaultModelName,
+                    Instructions = "You are a helpful assistant.",
+                    Tools = tools
+                },
+                ChatHistoryProviderFactory = (ctx, _) => new ValueTask<ChatHistoryProvider>(
+                    new DbChatHistoryProvider(serviceScopeFactory, ctx.SerializedState))
             })
-            .ValidateOnStart();
+            .AsBuilder()
+            .Use(FunctionCallMiddleware)
+            .Build();
+    }
 
-        // Register keyed chat client for Agent Framework (Azure OpenAI)
-        // This is required for agent discovery by DevUI
-        var azureSettings = builder.Configuration.GetSection(AzureOpenAiSettings.SectionName).Get<AzureOpenAiSettings>()
-            ?? throw new InvalidOperationException("Azure OpenAI settings not found in configuration.");
+    /*
+     * REMARK: different providers differ in the initial client creation. From there, they can be "rejoined" to the same
+     * pipeline by having them as builders.
+     */
 
-        // Register keyed chat client using AddKeyedSingleton
-        builder.Services.AddKeyedSingleton<IChatClient>("chat-model", (sp, key) =>
+#region Helpers
+    /// Initializes a <see cref="ChatClientBuilder"/> for Microsoft Foundry.
+    private static ChatClientBuilder ConstructFoundryBaseChatClient(
+        AiOptions aiOptions,
+        IValidator<MicrosoftFoundryOptions> validator)
+    {
+        var validationResult = validator.Validate(aiOptions.MicrosoftFoundry);
+        if (!validationResult.IsValid)
         {
-            var client = new AzureOpenAIClient(
-                new Uri(azureSettings.Endpoint),
-                new AzureKeyCredential(azureSettings.ApiKey));
-            var chatClient = client.GetChatClient(azureSettings.DeploymentName)
-                .AsIChatClient();
+            var errorMessages = string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage));
+            throw new InvalidOperationException(
+                $"Microsoft Foundry configuration validation failed: {errorMessages}");
+        }
 
-            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("AiConfiguration");
-            logger.LogInformation("Azure OpenAI keyed IChatClient configured with deployment: {DeploymentName}",
-                azureSettings.DeploymentName);
+        var endpoint = new Uri(aiOptions.MicrosoftFoundry.Endpoint);
+        var credential = new AzureKeyCredential(aiOptions.MicrosoftFoundry.Key);
+        return new AzureOpenAIClient(endpoint, credential)
+            .GetChatClient(aiOptions.MicrosoftFoundry.ModelDeploymentName)
+            .AsIChatClient()
+            .AsBuilder();
+    }
 
-            return chatClient;
-        });
-
-        // Register singleton IChatClient for backward compatibility (gets from keyed service)
-        builder.Services.AddSingleton<IChatClient>(sp =>
+    /// Initializes a <see cref="ChatClientBuilder"/> for the Anthropic API.
+    private static ChatClientBuilder ConstructAnthropicBaseChatClient(
+        AiOptions aiOptions,
+        IValidator<AnthropicOptions> validator)
+    {
+        var validationResult = validator.Validate(aiOptions.Anthropic);
+        if (!validationResult.IsValid)
         {
-            return sp.GetRequiredKeyedService<IChatClient>("chat-model");
-        });
+            var errorMessages = string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage));
+            throw new InvalidOperationException(
+                $"Anthropic configuration validation failed: {errorMessages}");
+        }
 
-        // Register IEmbeddingGenerator for embeddings (Azure OpenAI)
-        // Register as generic IEmbeddingGenerator<string, Embedding<float>> for use with GenerateAsync extension method
-        builder.Services.AddSingleton<IEmbeddingGenerator<string, Embedding<float>>>(sp =>
+        return new AnthropicClient(new ClientOptions { APIKey = aiOptions.Anthropic.ApiKey })
+            .AsIChatClient()
+            .AsBuilder()
+            .ConfigureOptions(o => o.RawRepresentationFactory = chat => RawRepresentationCallback(o, chat));
+    }
+
+    /// Configures the message creation options for Anthropic API calls.
+    private static MessageCreateParams RawRepresentationCallback(ChatOptions options, IChatClient chat)
+    {
+        return new MessageCreateParams
         {
-            var settings = sp.GetRequiredService<IOptions<AzureOpenAiSettings>>().Value;
-            var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("AiConfiguration");
-
-            var embeddingDeploymentName = settings.EmbeddingDeploymentName ?? settings.DeploymentName;
-
-            // Create Azure OpenAI client and use Microsoft.Agents.AI.OpenAI extension method
-            var endpoint = new Uri(settings.Endpoint);
-            var credential = new AzureKeyCredential(settings.ApiKey);
-            var embeddingGenerator = new AzureOpenAIClient(endpoint, credential)
-                .GetEmbeddingClient(embeddingDeploymentName)
-                .AsIEmbeddingGenerator();
-
-            logger.LogInformation("Azure OpenAI IEmbeddingGenerator configured with deployment: {EmbeddingDeploymentName}",
-                embeddingDeploymentName);
-
-            return embeddingGenerator;
-        });
-
-        // Also register as non-generic IEmbeddingGenerator for backward compatibility
-        builder.Services.AddSingleton<IEmbeddingGenerator>(sp => sp.GetRequiredService<IEmbeddingGenerator<string, Embedding<float>>>());
-
-        // Register workflows (scoped - they use scoped services like ConversationContextService)
-        builder.Services.AddScoped<AssessmentWorkflow>();
-        builder.Services.AddScoped<SymptomTrackingWorkflow>();
-
-        // Register tools (scoped - they use scoped services like ConversationContextService)
-        builder.Services.AddScoped<AssessmentTools>();
-        builder.Services.AddScoped<SymptomTrackerTools>();
-
-        // Register agents for DevUI discovery
-        var healthChatAgentBuilder = builder.AddAIAgent(
-            "health-chat",
-            instructions: "You are a healthcare assistant that helps users track symptoms and create health assessments. " +
-                         "You can help users report symptoms, track symptom episodes, and generate health assessments based on their symptoms.",
-            description: "Health chat agent for symptom tracking and assessments",
-            chatClientServiceKey: "chat-model")
-            .WithInMemorySessionStore();
-
-        // Register workflows as agents for DevUI discovery
-        // Note: These are wrapper registrations - the actual workflow execution still uses the scoped services above
-        var assessmentWorkflowAgent = builder.AddAIAgent(
-            "assessment-workflow",
-            instructions: "You are an assessment workflow agent that helps create health assessments based on user symptoms.",
-            description: "Workflow for creating health assessments from user symptoms",
-            chatClientServiceKey: "chat-model")
-            .WithInMemorySessionStore();
-
-        var symptomTrackingWorkflowAgent = builder.AddAIAgent(
-            "symptom-tracking-workflow",
-            instructions: "You are a symptom tracking workflow agent that helps users track and manage their symptoms.",
-            description: "Workflow for tracking and managing user symptoms",
-            chatClientServiceKey: "chat-model")
-            .WithInMemorySessionStore();
-
-        // Return agent builders so they can be mapped as HTTP endpoints
-        return new AgentBuildersResult
-        {
-            HealthChatAgent = healthChatAgentBuilder,
-            AssessmentWorkflowAgent = assessmentWorkflowAgent,
-            SymptomTrackingWorkflowAgent = symptomTrackingWorkflowAgent
+            Model = options.ModelId ?? "claude-haiku-4-5",
+            MaxTokens = options.MaxOutputTokens ?? 4096,
+            Messages = [],
+            Thinking = new ThinkingConfigParam(new ThinkingConfigEnabled(budgetTokens: 1024))
         };
     }
+#endregion
+}
+
+public static class AgentProviderConverter
+{
+    public static AgentProvider ToEnum(string value) => value switch
+    {
+        "microsoft-foundry" => AgentProvider.MicrosoftFoundry,
+        "anthropic" => AgentProvider.Anthropic,
+        _ => throw new ArgumentException($"Unknown provider: {value}")
+    };
+
+    public static string ToStringValue(AgentProvider provider) => provider switch
+    {
+        AgentProvider.MicrosoftFoundry => "microsoft-foundry",
+        AgentProvider.Anthropic => "anthropic",
+        _ => throw new ArgumentOutOfRangeException(nameof(provider))
+    };
 }

@@ -151,7 +151,7 @@ public class AuthController : ControllerBase
 
         if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
         {
-            return this.UnauthorizedError("Invalid token");
+            throw new UnauthorizedAccessException("Invalid token: user ID claim is missing or invalid");
         }
 
         var user = await authService.GetUserByIdAsync(userId);

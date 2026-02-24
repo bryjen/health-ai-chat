@@ -2,8 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Web.Common.DTOs;
 using Web.Common.DTOs.Health;
 using WebApi.Controllers.Utils;
-using WebApi.Repositories;
-using WebApi.Services.Graph;
+using WebApi.Services.Data;
 
 namespace WebApi.Controllers;
 
@@ -35,11 +34,11 @@ public class AssessmentsController : BaseController
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AssessmentDto>> GetAssessmentByConversation(
-        [FromRoute] Guid conversationId,
-        [FromServices] AssessmentRepository assessmentRepository)
+        [FromServices] AssessmentService assessmentService,
+        [FromRoute] Guid conversationId)
     {
         var userId = GetUserId();
-        var assessment = await assessmentRepository.GetAssessmentByConversationAsync(conversationId);
+        var assessment = await assessmentService.GetAssessmentByConversationAsync(conversationId);
 
         if (assessment == null || assessment.UserId != userId)
         {
@@ -63,7 +62,6 @@ public class AssessmentsController : BaseController
                 Reasoning = l.Reasoning,
                 EpisodeName = l.Episode?.Symptom?.Name
             }).ToList(),
-            NegativeFindingIds = assessment.NegativeFindingIds,
             CreatedAt = assessment.CreatedAt
         };
 
@@ -85,11 +83,11 @@ public class AssessmentsController : BaseController
     [ProducesResponseType(typeof(List<AssessmentDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<List<AssessmentDto>>> GetRecentAssessments(
-        [FromServices] AssessmentRepository assessmentRepository,
+        [FromServices] AssessmentService assessmentService,
         [FromQuery] int limit = 10)
     {
         var userId = GetUserId();
-        var assessments = await assessmentRepository.GetRecentAssessmentsAsync(userId, limit);
+        var assessments = await assessmentService.GetRecentAssessmentsAsync(userId, limit);
 
         var assessmentDtos = assessments.Select(a => new AssessmentDto
         {
@@ -108,7 +106,6 @@ public class AssessmentsController : BaseController
                 Reasoning = l.Reasoning,
                 EpisodeName = l.Episode?.Symptom?.Name
             }).ToList(),
-            NegativeFindingIds = a.NegativeFindingIds,
             CreatedAt = a.CreatedAt
         }).ToList();
 
@@ -131,11 +128,11 @@ public class AssessmentsController : BaseController
     [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AssessmentDto>> GetAssessmentById(
-        [FromRoute] int id,
-        [FromServices] AssessmentRepository assessmentRepository)
+        [FromServices] AssessmentService assessmentService,
+        [FromRoute] int id)
     {
         var userId = GetUserId();
-        var assessment = await assessmentRepository.GetAssessmentByIdAsync(id);
+        var assessment = await assessmentService.GetAssessmentByIdAsync(id);
 
         if (assessment == null || assessment.UserId != userId)
         {
@@ -159,13 +156,13 @@ public class AssessmentsController : BaseController
                 Reasoning = l.Reasoning,
                 EpisodeName = l.Episode?.Symptom?.Name
             }).ToList(),
-            NegativeFindingIds = assessment.NegativeFindingIds,
             CreatedAt = assessment.CreatedAt
         };
 
         return Ok(assessmentDto);
     }
 
+    /*
     /// <summary>
     /// Assessment as Graph
     /// </summary>
@@ -199,4 +196,5 @@ public class AssessmentsController : BaseController
             return this.NotFoundError("Assessment not found");
         }
     }
+     */
 }

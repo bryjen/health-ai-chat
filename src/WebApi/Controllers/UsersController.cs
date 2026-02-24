@@ -14,8 +14,7 @@ namespace WebApi.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/[controller]")]
-[Authorize]
-public class UsersController : ControllerBase
+public class UsersController : BaseController
 {
     /// <summary>
     /// Retrieves the profile information of the currently authenticated user.
@@ -31,16 +30,9 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<UserProfileDto>> GetMeAsync(
         [FromServices] AuthService authService)
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            return this.UnauthorizedError("Invalid token");
-        }
-
         try
         {
-            var profile = await authService.GetProfileAsync(userId);
+            var profile = await authService.GetProfileAsync(CurrentUser.UserId);
             return Ok(profile);
         }
         catch (NotFoundException ex)
@@ -67,16 +59,9 @@ public class UsersController : ControllerBase
         [FromBody] UpdateUserProfileRequest request,
         [FromServices] AuthService authService)
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            return this.UnauthorizedError("Invalid token");
-        }
-
         try
         {
-            var profile = await authService.UpdateProfileAsync(userId, request);
+            var profile = await authService.UpdateProfileAsync(CurrentUser.UserId, request);
             return Ok(profile);
         }
         catch (NotFoundException ex)

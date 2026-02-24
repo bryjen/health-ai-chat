@@ -51,15 +51,16 @@ public static class OptionsConfiguration
         services.AddSingleton<IValidator<EmailSettings>, EmailSettingsValidator>();
         services.AddSingleton<IValidator<FrontendSettings>, FrontendSettingsValidator>();
         services.AddSingleton<IValidator<RateLimitingSettings>, RateLimitingSettingsValidator>();
-        services.AddSingleton<IValidator<AzureOpenAiSettings>, AzureOpenAiSettingsValidator>();
+        services.AddSingleton<IValidator<MicrosoftFoundryOptions>, MicrosoftFoundryOptionsValidator>();
+        services.AddSingleton<IValidator<AnthropicOptions>, AnthropicOptionsValidator>();
 
         services.AddValidatedSettings<JwtSettings>(configuration);
         services.AddValidatedSettings<EmailSettings>(configuration);
         services.AddValidatedSettings<FrontendSettings>(configuration);
         services.AddValidatedSettings<RateLimitingSettings>(configuration);
+
+        services.AddValidatedSettings<AiOptions>(configuration, hasValidator: false);
         services.AddValidatedSettings<OAuthSettings>(configuration, hasValidator: false);
-        services.AddValidatedSettings<AzureOpenAiSettings>(configuration);
-        services.AddValidatedSettings<VectorStoreSettings>(configuration, hasValidator: false);
         services.AddValidatedSettings<VersionSettings>(configuration, hasValidator: false);
 
         // enable automatic FluentValidation for ASP.NET Core model binding
@@ -100,7 +101,7 @@ public static class OptionsConfiguration
     ///     public const string SectionName = "MySection";
     ///     public string Value { get; set; }
     /// }
-    /// 
+    ///
     /// // FluentValidation validator
     /// public class MySettingsValidator : AbstractValidator&lt;MySettings&gt;
     /// {
@@ -109,7 +110,7 @@ public static class OptionsConfiguration
     ///         RuleFor(x => x.Value).NotEmpty();
     ///     }
     /// }
-    /// 
+    ///
     /// // Registration
     /// services.AddValidatorsFromAssemblyContaining&lt;MySettingsValidator&gt;();
     /// services.AddValidatedSettings&lt;MySettings&gt;(configuration);
