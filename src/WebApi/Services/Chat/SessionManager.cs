@@ -14,7 +14,8 @@ namespace WebApi.Services.Chat;
 /// </summary>
 public class SessionManager(
     IServiceScopeFactory serviceScopeFactory,
-    AIAgent agent)
+    AIAgent agent,
+    AiState aiState)
 {
     /// <summary>
     /// Get all sessions ordered by most recent.
@@ -74,6 +75,11 @@ public class SessionManager(
             throw new ArgumentException($"Session {sessionId} not found");
         }
 
+        if (sessionEntity.UserId != null && sessionEntity.UserId != aiState.UserId)
+        {
+            throw new UnauthorizedAccessException($"Session {sessionId} does not belong to the current user");
+        }
+
         var stateJson = JsonSerializer.Deserialize<JsonElement>(sessionEntity.SerializedState);
         var session = await agent.DeserializeSessionAsync(stateJson);
 
@@ -104,6 +110,7 @@ public class SessionManager(
             {
                 Id = sessionDbKey,
                 SerializedState = JsonSerializer.Serialize(serializedSession),
+                UserId = aiState.UserId != Guid.Empty ? aiState.UserId : null,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             });

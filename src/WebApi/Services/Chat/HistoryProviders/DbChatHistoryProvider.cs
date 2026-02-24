@@ -35,8 +35,6 @@ public sealed class DbChatHistoryProvider : ChatHistoryProvider
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Load more messages to ensure tool use/result pairs aren't split
-        // Increased from 10 to 50 to handle conversations with multiple tool calls
         var records = await dbContext.ChatMessages
             .Where(x => x.SessionId == SessionDbKey)
             .OrderByDescending(x => x.Timestamp)
@@ -46,45 +44,7 @@ public sealed class DbChatHistoryProvider : ChatHistoryProvider
         records.Reverse();
         var messages = records.ConvertAll(x => JsonSerializer.Deserialize<ChatMessage>(x.SerializedMessage!)!);
 
-        // Validate tool use/result pairing to prevent Anthropic API errors
-        ValidateToolMessagePairing(messages);
-
         return messages;
-    }
-
-    private void ValidateToolMessagePairing(List<ChatMessage> messages)
-    {
-        // Check for orphaned tool results (results without corresponding tool use)
-        for (int i = 0; i < messages.Count; i++)
-        {
-            var message = messages[i];
-            var toolResults = message.Contents.OfType<FunctionResultContent>().ToList();
-
-            if (toolResults.Any() && i > 0)
-            {
-                // Previous message should contain tool uses
-                var prevMessage = messages[i - 1];
-                var toolUses = prevMessage.Contents.OfType<FunctionCallContent>().ToList();
-
-                // Verify each result has a corresponding use
-                foreach (var result in toolResults)
-                {
-                    var hasMatchingUse = toolUses.Any(use => use.CallId == result.CallId);
-                    if (!hasMatchingUse)
-                    {
-                        throw new InvalidOperationException(
-                            $"Tool result with CallId '{result.CallId}' has no corresponding tool use. " +
-                            "This indicates corrupted session state. Consider starting a new session.");
-                    }
-                }
-            }
-            else if (toolResults.Any() && i == 0)
-            {
-                throw new InvalidOperationException(
-                    "First message in history contains tool results without preceding tool use. " +
-                    "Session history is incomplete. Consider starting a new session.");
-            }
-        }
     }
 
     public override async ValueTask InvokedAsync(
@@ -98,13 +58,17 @@ public sealed class DbChatHistoryProvider : ChatHistoryProvider
         using var scope = _serviceScopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        // Save ALL messages including tool calls/results
-        // Only filter out approval request/response (human-in-the-loop UI prompts)
-        // FunctionCallContent and FunctionResultContent MUST be saved for Anthropic API compatibility
+        // Skip tool intermediary messages — FunctionInvokingChatClient handles the tool loop
+        // internally and never saves the tool_result side, so saving tool_use would corrupt history
+        // (Anthropic requires tool_use → tool_result pairs). The final assistant text already
+        // summarises what happened, so the conversation remains coherent without them.
         var persistableMessages = context.RequestMessages
             .Concat(context.AIContextProviderMessages ?? [])
             .Concat(context.ResponseMessages ?? [])
-            .Where(m => !m.Contents.Any(c => c is FunctionApprovalRequestContent or FunctionApprovalResponseContent))
+            .Where(m => !m.Contents.Any(c => c is FunctionApprovalRequestContent
+                or FunctionApprovalResponseContent
+                or FunctionCallContent
+                or FunctionResultContent))
             .ToList();
 
         // Drain any out-of-band tags emitted during plugin execution this turn.
@@ -119,10 +83,6 @@ public sealed class DbChatHistoryProvider : ChatHistoryProvider
                     System.Text.Encoding.UTF8.GetBytes(message.Text ?? string.Empty)))}";
             var key = SessionDbKey + messageId;
             var existing = await dbContext.ChatMessages.FindAsync([key], cancellationToken);
-
-            // Log what we're saving for debugging
-            var hasToolCall = message.Contents.Any(c => c is FunctionCallContent);
-            var hasToolResult = message.Contents.Any(c => c is FunctionResultContent);
 
             if (existing is not null)
             {

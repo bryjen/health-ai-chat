@@ -2,6 +2,7 @@
 
 public class ChatComponentState
 {
-    public bool RawView { get; set; } = false;
-    public bool ShowUnknownTags { get; set; } = false;
+    public bool RawView { get; set; }
+    public bool ShowUnknownTags { get; set; }
+    public bool ShowToolCalls { get; set; }
 }

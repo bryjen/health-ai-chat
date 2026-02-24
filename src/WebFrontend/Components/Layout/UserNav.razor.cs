@@ -20,13 +20,19 @@ public partial class UserNav : ComponentBase
         Navigation.NavigateTo("/login", forceLoad: true);
     }
 
-    private string GetDisplayName(AuthenticationState context)
+    private string? GetDisplayName(AuthenticationState context)
     {
         var user = AuthService.CurrentUser;
-        if (!string.IsNullOrEmpty(user?.Email))
-            return user.Email;
+        var fullName = string.Join(" ", new[] { user?.FirstName, user?.LastName }
+            .Where(s => !string.IsNullOrWhiteSpace(s)));
+        if (!string.IsNullOrEmpty(fullName))
+            return fullName;
 
-        return context.User?.Identity?.Name ?? "User";
+        var name = context.User?.Identity?.Name ?? "User";
+        if (string.IsNullOrEmpty(name))
+            return name;
+
+        return null;
     }
 
     private string GetEmail(AuthenticationState context)
@@ -40,6 +46,10 @@ public partial class UserNav : ComponentBase
 
     private string GetInitials(AuthenticationState context)
     {
+        var user = AuthService.CurrentUser;
+        if (!string.IsNullOrWhiteSpace(user?.FirstName) && !string.IsNullOrWhiteSpace(user?.LastName))
+            return $"{user.FirstName[0]}{user.LastName[0]}".ToUpperInvariant();
+
         var name = GetDisplayName(context);
         if (string.IsNullOrWhiteSpace(name))
             return "?";

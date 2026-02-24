@@ -134,15 +134,15 @@ public class AuthService(
         }
 
         // Use generic OAuth login method
-        return await LoginWithOAuthAsync(provider, validationResult.UserId, validationResult.Email);
+        return await LoginWithOAuthAsync(provider, validationResult.UserId, validationResult.Email, validationResult.FirstName, validationResult.LastName);
     }
 
-    public async Task<AuthResponse> LoginWithOAuthAsync(AuthProvider provider, string providerUserId, string email)
+    public async Task<AuthResponse> LoginWithOAuthAsync(AuthProvider provider, string providerUserId, string email, string? firstName = null, string? lastName = null)
     {
         // Find existing account for this provider
         var user = await context.Users
-            .FirstOrDefaultAsync(u => 
-                u.Provider == provider && 
+            .FirstOrDefaultAsync(u =>
+                u.Provider == provider &&
                 u.ProviderUserId == providerUserId);
 
         if (user == null)
@@ -162,6 +162,8 @@ public class AuthService(
                 PasswordHash = null,
                 Provider = provider,
                 ProviderUserId = providerUserId,
+                FirstName = firstName,
+                LastName = lastName,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -194,23 +196,6 @@ public class AuthService(
         return await GenerateAuthResponseAsync(tokenEntity.User);
     }
     
-    public async Task<UserDto?> GetUserByIdAsync(Guid userId)
-    {
-        var user = await context.Users.FindAsync(userId);
-        
-        if (user == null)
-        {
-            return null;
-        }
-
-        return new UserDto
-        {
-            Id = user.Id,
-            Email = user.Email,
-            CreatedAt = user.CreatedAt
-        };
-    }
-
     public async Task<UserProfileDto> GetProfileAsync(Guid userId)
     {
         var user = await context.Users.FindAsync(userId);
@@ -246,16 +231,6 @@ public class AuthService(
         return MapToProfileDto(user);
     }
 
-    private static UserDto MapToDto(User user)
-    {
-        return new UserDto
-        {
-            Id = user.Id,
-            Email = user.Email,
-            CreatedAt = user.CreatedAt
-        };
-    }
-
     private static UserProfileDto MapToProfileDto(User user)
     {
         return new UserProfileDto
@@ -285,7 +260,7 @@ public class AuthService(
 
         return new AuthResponse
         {
-            User = MapToDto(user),
+            User = MapToProfileDto(user),
             AccessToken = accessToken,
             RefreshToken = refreshToken,
             AccessTokenExpiresAt = DateTime.UtcNow.AddMinutes(accessTokenExpirationMinutes),

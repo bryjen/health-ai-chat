@@ -1,11 +1,18 @@
 using System.ComponentModel;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Options;
+using Web.Common.DTOs.Health;
 using WebApi.Models;
+using WebApi.Services.Chat.Response;
 using WebApi.Services.Data;
 
 namespace WebApi.Services.Chat.Plugins;
 
 public sealed class AssessmentPlugin(
+    IOptions<JsonOptions> jsonOptions,
+    ResponseWriter responseWriter,  // primarly used to emit "status updated"; also ensures that the model isn't generating/emitting anything
     AiState aiState,
     AssessmentService assessmentService,
     ILogger<AssessmentPlugin> logger)
@@ -20,9 +27,6 @@ public sealed class AssessmentPlugin(
     {
         try
         {
-            if (aiState.ConversationId is null)
-                return "Error: ConversationId is required in AiState.";
-
             var differentialsList = differentials?
                 .Split(',')
                 .Select(d => d.Trim())
@@ -32,7 +36,7 @@ public sealed class AssessmentPlugin(
             var assessment = new Assessment
             {
                 UserId = aiState.UserId,
-                ConversationId = aiState.ConversationId.Value,
+                ConversationId = aiState.ConversationId,
                 Hypothesis = hypothesis,
                 Confidence = (decimal)Math.Clamp(confidence, 0, 1),
                 Differentials = differentialsList,
@@ -41,6 +45,20 @@ public sealed class AssessmentPlugin(
             };
 
             var created = await assessmentService.CreateAssessmentAsync(assessment);
+
+            var status = new AssessmentCreatedStatus
+            {
+                AssessmentId      = created.Id,
+                Hypothesis        = hypothesis,
+                Confidence        = (float)assessment.Confidence,
+                Differentials     = differentialsList,
+                Reasoning         = reasoning,
+                RecommendedAction = recommendedAction
+            };
+            await responseWriter.EmitRawAsync(
+                "AssessmentCreated",
+                JsonSerializer.Serialize(status, jsonOptions.Value.JsonSerializerOptions),
+                CancellationToken.None);
 
             logger.LogInformation("Created assessment {AssessmentId}: {Hypothesis} (confidence: {Confidence})",
                 created.Id, hypothesis, confidence);

@@ -1,7 +1,7 @@
 @inherits ShadcnComponentBase
 @using WebFrontend.Components.Chat.Models
 
-@if (Component.Status is { SymptomName: not null } status)
+@if (Component.Status is { Hypothesis: not null } status)
 {
     <div class="rounded-lg border border-border bg-card text-card-foreground shadow-sm mt-2 mb-1 overflow-hidden text-xs">
 
@@ -9,21 +9,21 @@
         <button
             class="flex w-full items-center gap-2 px-3 py-2 hover:bg-muted/50 transition-colors text-left"
             @onclick="ToggleExpanded">
-            <div class="flex items-center justify-center w-5 h-5 rounded-sm bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
-                <LuPlus class="w-3 h-3" />
+            <div class="flex items-center justify-center w-5 h-5 rounded-sm bg-blue-500/15 text-blue-600 dark:text-blue-400 shrink-0">
+                <LuClipboard class="w-3 h-3" />
             </div>
             <span class="flex-1 font-medium text-foreground/90 leading-snug">
-                Symptom recorded — <span class="text-foreground">@status.SymptomName</span>
+                Assessment — <span class="text-foreground">@status.Hypothesis</span>
             </span>
             <span class="text-muted-foreground shrink-0 transition-transform duration-200 @(_expanded ? "rotate-180" : "rotate-0")">
                 <LuChevronDown class="w-3.5 h-3.5" />
             </span>
         </button>
 
-        <!-- Body -->
+        <!-- Body (mounted/unmounted for clean animation) -->
         @if (_expanded)
         {
-            <SymptomCardBody Status="status" />
+            <AssessmentCardBody Status="status" />
         }
 
     </div>
@@ -31,7 +31,7 @@
 
 @code {
     [Parameter]
-    public required SymptomCreatedMessageComponent Component { get; set; }
+    public required AssessmentCreatedMessageComponent Component { get; set; }
 
     private bool _expanded = false;
 

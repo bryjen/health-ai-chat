@@ -1,9 +1,10 @@
 namespace WebFrontend.Models.Chat.StatusTypes;
 
 /// <summary>
-/// Status indicating that an assessment has been created.
+/// SignalR hub notification that an assessment was created.
+/// Lightweight subset of the full AssessmentCreatedStatus DTO.
 /// </summary>
-public class AssessmentCreatedStatus : StatusInformation
+public class AssessmentCreatedHubStatus : StatusInformation
 {
     public override string Type => "assessment-created";
 

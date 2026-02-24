@@ -1,0 +1,87 @@
+@using Web.Common.DTOs.Health
+
+<div class="px-3 pb-3 pt-1 border-t border-border space-y-2.5 animate-accordion-down">
+
+    <!-- ID + Confidence row -->
+    <div class="flex items-center justify-between gap-4 pt-1">
+        <span class="text-muted-foreground">
+            ID: <span class="font-mono text-foreground/80">@Status.AssessmentId</span>
+        </span>
+        @{
+            var pct = (int)(Status.Confidence * 100);
+        }
+        <div class="flex items-center gap-2">
+            <span class="text-muted-foreground">Confidence:</span>
+            <div class="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div class="h-full rounded-full bg-green-500 transition-[width] duration-700 ease-out" style="width: @(pct)%"></div>
+            </div>
+            <span class="font-medium text-foreground/80 tabular-nums">@(pct)%</span>
+        </div>
+    </div>
+
+    <!-- Hypothesis -->
+    <div>
+        <div class="text-muted-foreground mb-0.5">Hypothesis</div>
+        <div class="text-foreground/90">@Status.Hypothesis</div>
+    </div>
+
+    <!-- Differentials -->
+    @if (Status.Differentials?.Count > 0)
+    {
+        <div>
+            <div class="text-muted-foreground mb-1">Differentials</div>
+            <div class="flex flex-wrap gap-1">
+                @foreach (var diff in Status.Differentials)
+                {
+                    <span class="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-inset ring-border">
+                        @diff
+                    </span>
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Reasoning -->
+    @if (!string.IsNullOrWhiteSpace(Status.Reasoning))
+    {
+        <div>
+            <div class="text-muted-foreground mb-0.5">Clinical Reasoning</div>
+            <p class="text-foreground/80 leading-relaxed">@Status.Reasoning</p>
+        </div>
+    }
+
+    <!-- Recommended Action -->
+    @if (!string.IsNullOrWhiteSpace(Status.RecommendedAction))
+    {
+        <div>
+            <div class="text-muted-foreground mb-0.5">Recommended Action</div>
+            <div class="flex items-center gap-1.5 @ActionColorClass">
+                <LuActivity class="w-3.5 h-3.5 shrink-0" />
+                <span class="font-medium">@ActionDisplayText</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public required AssessmentCreatedStatus Status { get; set; }
+
+    private string ActionDisplayText => Status.RecommendedAction switch
+    {
+        "self-care"   => "Self Care",
+        "see-gp"      => "Consult General Practitioner (GP)",
+        "urgent-care" => "Seek Urgent Care",
+        "emergency"   => "Go to Emergency",
+        _             => Status.RecommendedAction ?? string.Empty
+    };
+
+    private string ActionColorClass => Status.RecommendedAction switch
+    {
+        "self-care"   => "text-green-600 dark:text-green-400",
+        "see-gp"      => "text-blue-600 dark:text-blue-400",
+        "urgent-care" => "text-amber-600 dark:text-amber-400",
+        "emergency"   => "text-red-600 dark:text-red-400",
+        _             => "text-foreground/80"
+    };
+}

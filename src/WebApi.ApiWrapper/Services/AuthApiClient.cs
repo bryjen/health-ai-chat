@@ -62,27 +62,6 @@ public class AuthApiClient : BaseApiClient, IAuthApiClient
     }
 
     /// <inheritdoc/>
-    public async Task<UserDto> GetCurrentUserAsync()
-    {
-        await EnsureAuthenticatedAsync();
-        
-        var response = await HttpClient.GetAsync("api/v1/auth/me");
-        
-        if (!response.IsSuccessStatusCode)
-        {
-            await HandleErrorResponseAsync(response);
-        }
-
-        var result = await response.Content.ReadFromJsonAsync<UserDto>(BaseApiClient.JsonOptions);
-        return result ?? throw new Exceptions.ApiException("Failed to deserialize user response", 500);
-    }
-
-    /// <summary>
-    /// Gets the current user's profile information.
-    /// </summary>
-    /// <returns>The user's profile data</returns>
-    /// <exception cref="Exceptions.ApiUnauthorizedException">Thrown when user is not authenticated (401).</exception>
-    /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
     public async Task<UserProfileDto> GetCurrentProfileAsync()
     {
         await EnsureAuthenticatedAsync();

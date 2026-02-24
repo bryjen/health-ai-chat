@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Routing;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using ShadcnBlazor.Components.Shared;
 using WebFrontend.Components.Chat.Models;
 using WebFrontend.Components.Chat.Services;
@@ -8,6 +9,9 @@ namespace WebFrontend.Components.Chat;
 
 public partial class AiChat : ShadcnComponentBase
 {
+    [Inject]
+    public required IWebAssemblyHostEnvironment Environment { get; set; }
+
     [Inject]
     public required ChatOrchestrator ChatOrchestrator { get; set; }
 
@@ -24,6 +28,11 @@ public partial class AiChat : ShadcnComponentBase
     {
         ChatOrchestrator.OnStateChange += OnChatStateChange;
         ChatOrchestrator.OnConversationStarted += OnConversationStarted;
+
+        if (Environment.IsDevelopment())
+        {
+            _chatComponentState.ShowToolCalls = true;
+        }
     }
 
     protected override async Task OnParametersSetAsync()

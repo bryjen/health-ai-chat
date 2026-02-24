@@ -10,7 +10,7 @@ namespace WebFrontend.Services;
 /// Concrete client for the health chat SignalR hub.
 /// Manages the hub connection and sending messages.
 /// </summary>
-public class ChatHubClient(ITokenProvider tokenProvider)
+public class ChatHubClient(ITokenProvider tokenProvider, JsonSerializerOptions jsonOptions)
     : IAsyncDisposable
 {
     private HubConnection? _hubConnection;
@@ -42,7 +42,7 @@ public class ChatHubClient(ITokenProvider tokenProvider)
             // Register status update listener
             _hubConnection.On<string>("StatusUpdate", async (statusJson) =>
             {
-                var status = DeserializeStatusInformation(statusJson);
+                var status = DeserializeStatusInformation(statusJson, jsonOptions);
                 if (status != null && StatusUpdateReceived != null)
                 {
                     await StatusUpdateReceived(status);
@@ -119,16 +119,11 @@ public class ChatHubClient(ITokenProvider tokenProvider)
         }
     }
 
-    private static StatusInformation? DeserializeStatusInformation(string statusJson)
+    private static StatusInformation? DeserializeStatusInformation(string statusJson, JsonSerializerOptions options)
     {
         try
         {
-            var jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
-
-            var element = JsonSerializer.Deserialize<JsonElement>(statusJson, jsonOptions);
+            var element = JsonSerializer.Deserialize<JsonElement>(statusJson, options);
             if (!element.TryGetProperty("type", out var typeElement))
             {
                 return null;
@@ -151,9 +146,9 @@ public class ChatHubClient(ITokenProvider tokenProvider)
                     Message = element.TryGetProperty("message", out var msg) ? msg.GetString() ?? "Analyzing assessment..." : "Analyzing assessment...",
                     Timestamp = timestamp
                 },
-                "assessment-created" => new Models.Chat.StatusTypes.AssessmentCreatedStatus
+                "assessment-created" => new Models.Chat.StatusTypes.AssessmentCreatedHubStatus
                 {
-                    AssessmentId = element.TryGetProperty("assessmentId", out var id) ? id.GetInt32() : 0,
+                    AssessmentId = element.TryGetProperty("assessment_id", out var id) ? id.GetInt32() : 0,
                     Hypothesis = element.TryGetProperty("hypothesis", out var hyp) ? hyp.GetString() ?? "Assessment" : "Assessment",
                     Confidence = element.TryGetProperty("confidence", out var conf) ? conf.GetDecimal() : 0m,
                     Timestamp = timestamp

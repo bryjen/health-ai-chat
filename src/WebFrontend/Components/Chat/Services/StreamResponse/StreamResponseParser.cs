@@ -1,10 +1,11 @@
 using System.Text;
 using System.Text.Json;
+using Web.Common.DTOs.Health;
 using WebFrontend.Components.Chat.Models;
 
 namespace WebFrontend.Components.Chat.Services.StreamResponse;
 
-public class StreamResponseParser(IList<MessageComponent> components) : IStreamResponseParser
+public class StreamResponseParser(IList<MessageComponent> components, JsonSerializerOptions jsonOptions) : IStreamResponseParser
 {
     private readonly StringBuilder _buffer = new();
     private ParseMode _mode = ParseMode.None;
@@ -59,7 +60,7 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
         if (string.IsNullOrWhiteSpace(tagToken))
             return;
 
-        if (IsEndTag(tagToken, "thinking") || IsEndTag(tagToken, "reasoning") || IsEndTag(tagToken, "search") || IsEndTag(tagToken, "text") || IsEndTag(tagToken, "toolcall") || IsEndTag(tagToken, "symptomcreated"))
+        if (IsEndTag(tagToken, "thinking") || IsEndTag(tagToken, "reasoning") || IsEndTag(tagToken, "search") || IsEndTag(tagToken, "text") || IsEndTag(tagToken, "toolcall") || IsEndTag(tagToken, "symptomcreated") || IsEndTag(tagToken, "assessmentcreated"))
         {
             ResetMode();
             return;
@@ -92,6 +93,12 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
         if (IsStartTag(tagToken, "symptomcreated"))
         {
             SetMode(ParseMode.SymptomCreated);
+            return;
+        }
+
+        if (IsStartTag(tagToken, "assessmentcreated"))
+        {
+            SetMode(ParseMode.AssessmentCreated);
             return;
         }
 
@@ -133,22 +140,24 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
             ParseSymptomCreatedJson(sc);
         }
 
+        if (_mode == ParseMode.AssessmentCreated && _activeComponent is AssessmentCreatedMessageComponent ac)
+        {
+            ParseAssessmentCreatedJson(ac);
+        }
+
         _mode = ParseMode.None;
         _activeComponent = null;
         _unknownTagName = null;
     }
 
-    private static void ParseSymptomCreatedJson(SymptomCreatedMessageComponent component)
+    private void ParseAssessmentCreatedJson(AssessmentCreatedMessageComponent component)
     {
-        try
-        {
-            var doc = JsonDocument.Parse(component.RawJson);
-            var root = doc.RootElement;
-            if (root.TryGetProperty("symptom_id", out var sid)) component.SymptomId = sid.GetInt32();
-            if (root.TryGetProperty("episode_id", out var eid)) component.EpisodeId = eid.GetInt32();
-            if (root.TryGetProperty("symptom_name", out var name)) component.SymptomName = name.GetString();
-        }
-        catch (JsonException) { }
+        try { component.Status = JsonSerializer.Deserialize<AssessmentCreatedStatus>(component.RawJson, jsonOptions); } catch { }
+    }
+
+    private void ParseSymptomCreatedJson(SymptomCreatedMessageComponent component)
+    {
+        try { component.Status = JsonSerializer.Deserialize<SymptomCreatedStatus>(component.RawJson, jsonOptions); } catch { }
     }
 
     private MessageComponent CreateComponent(ParseMode mode)
@@ -160,6 +169,7 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
             ParseMode.Text => new TextMessageComponent { Content = string.Empty },
             ParseMode.ToolCall => new ToolCallMessageComponent { FunctionName = string.Empty },
             ParseMode.SymptomCreated => new SymptomCreatedMessageComponent { RawJson = string.Empty },
+            ParseMode.AssessmentCreated => new AssessmentCreatedMessageComponent { RawJson = string.Empty },
             ParseMode.Unknown => new UnknownMessageComponent { TagName = _unknownTagName!, Content = string.Empty },
             _ => throw new InvalidOperationException("Cannot create component for None mode.")
         };
@@ -204,6 +214,9 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
                 break;
             case SymptomCreatedMessageComponent symptomCreated:
                 symptomCreated.RawJson += content;
+                break;
+            case AssessmentCreatedMessageComponent assessmentCreated:
+                assessmentCreated.RawJson += content;
                 break;
             case UnknownMessageComponent unknown:
                 unknown.Content += content;
@@ -259,6 +272,7 @@ public class StreamResponseParser(IList<MessageComponent> components) : IStreamR
         Text,
         ToolCall,
         SymptomCreated,
+        AssessmentCreated,
         Unknown
     }
 }

@@ -55,7 +55,7 @@ public class GoogleTokenValidationService
                 throw new UnauthorizedAccessException("Google ID token missing email");
             }
 
-            return new TokenValidationResult(payload.Subject, payload.Email);
+            return new TokenValidationResult(payload.Subject, payload.Email, payload.GivenName, payload.FamilyName);
         }
         catch (InvalidJwtException ex)
         {

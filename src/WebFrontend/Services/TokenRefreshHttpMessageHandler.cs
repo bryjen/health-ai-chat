@@ -20,6 +20,7 @@ public class TokenRefreshHttpMessageHandler : DelegatingHandler
     private readonly LocalStorageTokenProvider _localStorageTokenProvider;
     private readonly AuthService? _authService;
     private readonly AuthenticationStateProvider? _authStateProvider;
+    private readonly JsonSerializerOptions _jsonOptions;
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private Task<AuthResponse?>? _refreshTask;
 
@@ -27,12 +28,14 @@ public class TokenRefreshHttpMessageHandler : DelegatingHandler
         ITokenProvider tokenProvider,
         HttpClient refreshHttpClient,
         LocalStorageTokenProvider localStorageTokenProvider,
+        JsonSerializerOptions jsonOptions,
         AuthService? authService = null,
         AuthenticationStateProvider? authStateProvider = null)
     {
         _tokenProvider = tokenProvider;
         _refreshHttpClient = refreshHttpClient;
         _localStorageTokenProvider = localStorageTokenProvider;
+        _jsonOptions = jsonOptions;
         _authService = authService;
         _authStateProvider = authStateProvider;
     }
@@ -130,13 +133,7 @@ public class TokenRefreshHttpMessageHandler : DelegatingHandler
                 RefreshToken = refreshToken
             };
 
-            var jsonOptions = new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                PropertyNameCaseInsensitive = true
-            };
-
-            var response = await _refreshHttpClient.PostAsJsonAsync("api/v1/auth/refresh", refreshRequest, jsonOptions, cancellationToken);
+            var response = await _refreshHttpClient.PostAsJsonAsync("api/v1/auth/refresh", refreshRequest, _jsonOptions, cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -145,7 +142,7 @@ public class TokenRefreshHttpMessageHandler : DelegatingHandler
                 return null;
             }
 
-            var authResponse = await response.Content.ReadFromJsonAsync<AuthResponse>(jsonOptions, cancellationToken);
+            var authResponse = await response.Content.ReadFromJsonAsync<AuthResponse>(_jsonOptions, cancellationToken);
             if (authResponse == null)
             {
                 return null;

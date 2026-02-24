@@ -130,3 +130,19 @@
 html {
     font-family: "Inter", system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
 }
+
+/* Accordion body enter animation */
+@keyframes accordion-down {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-accordion-down {
+    animation: accordion-down 0.18s ease-out forwards;
+}

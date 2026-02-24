@@ -18,11 +18,14 @@
             case TextMessageComponent text:
                 <TextMessageComponentView Component="@text" />
                 break;
-            case ToolCallMessageComponent toolCall:
+            case ToolCallMessageComponent toolCall when ChatComponentState.ShowToolCalls:
                 <ToolCallMessageComponentView Component="@toolCall" />
                 break;
             case SymptomCreatedMessageComponent symptomCreated:
                 <SymptomCreatedMessageComponentView Component="@symptomCreated" />
+                break;
+            case AssessmentCreatedMessageComponent assessmentCreated:
+                <AssessmentCreatedMessageComponentView Component="@assessmentCreated" />
                 break;
             case UnknownMessageComponent unknown when ChatComponentState.ShowUnknownTags:
                 <UnknownMessageComponentView Component="@unknown" />

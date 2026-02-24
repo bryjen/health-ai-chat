@@ -19,11 +19,11 @@ public partial class ChatInput : ComponentBase, IAsyncDisposable
     [CascadingParameter(Name = nameof(ChatComponentState))]
     public ChatComponentState ChatComponentState { get; set; } = new();
 
-    [Parameter]
-    public EventCallback<string> SubmitPrompt { get; set; }
+    [CascadingParameter(Name = "InvokeParentStateHasChanged")]
+    public EventCallback InvokeParentStateHasChanged { get; set; } = new();
 
     [Parameter]
-    public EventCallback NotifyParent { get; set; }
+    public EventCallback<string> SubmitPrompt { get; set; }
 
     private string _prompt = string.Empty;
     private bool _extendedThinkingToggle = true;
@@ -35,13 +35,19 @@ public partial class ChatInput : ComponentBase, IAsyncDisposable
     private async Task CheckedChanged()
     {
         ChatComponentState.RawView = !ChatComponentState.RawView;
-        await NotifyParent.InvokeAsync();
+        await InvokeParentStateHasChanged.InvokeAsync();
     }
 
     private async Task ShowUnknownTagsChanged()
     {
         ChatComponentState.ShowUnknownTags = !ChatComponentState.ShowUnknownTags;
-        await NotifyParent.InvokeAsync();
+        await InvokeParentStateHasChanged.InvokeAsync();
+    }
+
+    private async Task ShowToolCallsChanged()
+    {
+        ChatComponentState.ShowToolCalls = !ChatComponentState.ShowToolCalls;
+        await InvokeParentStateHasChanged.InvokeAsync();
     }
 
 

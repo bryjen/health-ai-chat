@@ -29,4 +29,4 @@ public interface ITokenValidationService
 /// <summary>
 /// Result of token validation containing extracted user information
 /// </summary>
-public record TokenValidationResult(string UserId, string Email);
+public record TokenValidationResult(string UserId, string Email, string? FirstName = null, string? LastName = null);

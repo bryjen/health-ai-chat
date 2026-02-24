@@ -25,7 +25,8 @@ public class ConversationsController(
     ChatService chatService,
     HttpResponseWriter responseWriter,
     AppDbContext dbContext,
-    MessageFormatter messageFormatter)
+    MessageFormatter messageFormatter,
+    AiState aiState)
     : BaseController
 {
     /// <summary>
@@ -35,8 +36,14 @@ public class ConversationsController(
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<List<object>>> ListConversations()
     {
+        var userId = CurrentUser.UserId;
+        var userSessionIds = await dbContext.Sessions
+            .Where(s => s.UserId == userId)
+            .Select(s => s.Id)
+            .ToListAsync();
+
         var conversations = await dbContext.ChatMessages
-            .Where(m => m.SessionId != null && m.MessageText != null)
+            .Where(m => userSessionIds.Contains(m.SessionId!) && m.MessageText != null)
             .GroupBy(m => m.SessionId!)
             .Select(g => new
             {
@@ -59,6 +66,10 @@ public class ConversationsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<object>> GetConversation(string conversationId)
     {
+        var session = await dbContext.Sessions.FindAsync(conversationId);
+        if (session == null) return NotFound(new ErrorResponse { Message = "Conversation not found" });
+        if (session.UserId != null && session.UserId != CurrentUser.UserId) return Forbid();
+
         try
         {
             var entities = await dbContext.ChatMessages
@@ -99,6 +110,11 @@ public class ConversationsController(
     [HttpPost("messages")]
     public async Task SendMessage([FromBody] ChatMessageRequest request, CancellationToken cancellationToken)
     {
+        aiState.UserId = CurrentUser.UserId;
+        // Best-effort: set ConversationId from existing session key so assessment plugin can reference it
+        if (!string.IsNullOrEmpty(request.ConversationId) && Guid.TryParse(request.ConversationId, out var convGuid))
+            aiState.ConversationId = convGuid;
+
         Response.ContentType = "application/json";
         Response.Headers.Append("Connection", "keep-alive");
         Response.Headers.Append("Cache-Control", "no-cache");
@@ -192,12 +208,13 @@ public class ConversationsController(
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> DeleteConversation(string conversationId)
     {
+        var session = await dbContext.Sessions.FindAsync(conversationId);
+        if (session == null) return NotFound();
+        if (session.UserId != null && session.UserId != CurrentUser.UserId) return Forbid();
+
         var messages = await dbContext.ChatMessages
             .Where(m => m.SessionId == conversationId)
             .ToListAsync();
-
-        if (messages.Count == 0)
-            return NotFound();
 
         dbContext.ChatMessages.RemoveRange(messages);
         await dbContext.SaveChangesAsync();

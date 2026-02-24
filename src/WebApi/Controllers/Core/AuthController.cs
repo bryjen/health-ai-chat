@@ -53,7 +53,7 @@ public class AuthController : ControllerBase
         try
         {
             var response = await authService.RegisterAsync(request);
-            return CreatedAtAction(nameof(GetCurrentUser), response);
+            return Created(string.Empty, response);
         }
         catch (ValidationException ex)
         {
@@ -123,45 +123,6 @@ public class AuthController : ControllerBase
         {
             return this.BadRequestError(ex.Message);
         }
-    }
-
-    /// <summary>
-    /// Retrieves Current User Profile
-    /// </summary>
-    /// <response code="200">User information retrieved successfully.</response>
-    /// <response code="401">User not authenticated or invalid token. **Returns standardized `ErrorResponse` model**.</response>
-    /// <response code="404">User wasn't found in the system. **Returns standardized `ErrorResponse` model**.</response>
-    /// <remarks>
-    /// Retrieves the profile information of the currently authenticated user.
-    /// Requires a valid JWT access token in the Authorization header.
-    ///
-    /// Remarks:
-    /// - This endpoint can be used to verify token validity and obtain current user information.
-    /// - The user ID from the response can be used for user-specific operations throughout the API.
-    /// </remarks>
-    [Authorize]
-    [HttpGet("me")]
-    [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<UserDto>> GetCurrentUser(
-        [FromServices] AuthService authService)
-    {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-
-        if (userIdClaim == null || !Guid.TryParse(userIdClaim, out var userId))
-        {
-            throw new UnauthorizedAccessException("Invalid token: user ID claim is missing or invalid");
-        }
-
-        var user = await authService.GetUserByIdAsync(userId);
-
-        if (user == null)
-        {
-            return this.NotFoundError("User not found");
-        }
-
-        return Ok(user);
     }
 
     /// <summary>

@@ -1,12 +1,14 @@
 @using ShadcnBlazor.Components.Dialog
 @using ShadcnBlazor.Components.Popover
 @using ShadcnBlazor.Components.Sheet
+@using WebFrontend.Components
+@using WebFrontend.Components.Other
 
 <PopoverProvider RepositionDebounceMilliseconds="1" />
 <DialogProvider />
 <SheetProvider />
 <CascadingAuthenticationState>
-    <Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+    <Router AppAssembly="@typeof(App).Assembly">
         <Found Context="routeData">
             <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
                 <NotAuthorized>
@@ -22,5 +24,9 @@
             </AuthorizeRouteView>
             <FocusOnNavigate RouteData="@routeData" Selector="h1"/>
         </Found>
+        <NotFound>
+            <PageTitle>404 - Page Not found</PageTitle>
+            <NotFound />
+        </NotFound>
     </Router>
 </CascadingAuthenticationState>

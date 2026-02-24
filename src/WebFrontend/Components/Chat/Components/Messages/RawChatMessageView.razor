@@ -76,6 +76,12 @@
                         nameof(SymptomCreatedMessageComponent),
                         symptomCreatedMessageComponent.RawJson.Trim()));
                     break;
+                case AssessmentCreatedMessageComponent assessmentCreatedMessageComponent:
+                    rawChatMessages.Add(new(
+                        role,
+                        nameof(AssessmentCreatedMessageComponent),
+                        assessmentCreatedMessageComponent.RawJson.Trim()));
+                    break;
                 case UnknownMessageComponent u:
                     rawChatMessages.Add(new(role, nameof(UnknownMessageComponent), $"[{u.TagName}] {u.Content.Trim()}"));
                     break;

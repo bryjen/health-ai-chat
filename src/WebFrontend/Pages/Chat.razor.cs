@@ -194,7 +194,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                     {
                         AssessmentGeneratingStatus gen => $"Generating: {gen.Message}",
                         AssessmentAnalyzingStatus anal => $"Analyzing: {anal.Message}",
-                        AssessmentCreatedStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
+                        AssessmentCreatedHubStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
                         GeneralStatus gen => $"General: {gen.Message}",
                         _ => status.ToString() ?? "Unknown"
                     };
@@ -253,7 +253,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         {
             AssessmentGeneratingStatus gen => $"Generating: {gen.Message}",
             AssessmentAnalyzingStatus anal => $"Analyzing: {anal.Message}",
-            AssessmentCreatedStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
+            AssessmentCreatedHubStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
             GeneralStatus gen => $"General: {gen.Message}",
             _ => status.ToString() ?? "Unknown"
         };
@@ -275,11 +275,11 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 isDuplicate = _currentStatusUpdates.OfType<AssessmentAnalyzingStatus>().Any();
                 await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] AssessmentAnalyzingStatus duplicate check: {isDuplicate}");
             }
-            else if (status is AssessmentCreatedStatus created)
+            else if (status is AssessmentCreatedHubStatus created)
             {
-                isDuplicate = _currentStatusUpdates.OfType<AssessmentCreatedStatus>()
+                isDuplicate = _currentStatusUpdates.OfType<AssessmentCreatedHubStatus>()
                     .Any(s => s.AssessmentId == created.AssessmentId);
-                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] AssessmentCreatedStatus duplicate check: {isDuplicate} (ID={created.AssessmentId})");
+                await JS.InvokeVoidAsync("console.log", $"[PROCESS STATUS] AssessmentCreatedHubStatus duplicate check: {isDuplicate} (ID={created.AssessmentId})");
             }
             else if (status is GeneralStatus general)
             {
@@ -324,7 +324,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                         seenAnalyzing = true;
                     }
                 }
-                else if (s is AssessmentCreatedStatus created)
+                else if (s is AssessmentCreatedHubStatus created)
                 {
                     if (!seenCreatedIds.Contains(created.AssessmentId))
                     {
@@ -428,9 +428,9 @@ public partial class Chat : ComponentBase, IAsyncDisposable
             foreach (var entityStatus in entityStatuses)
             {
                 // Avoid duplicates for assessment statuses - each type should only appear once
-                if (entityStatus is AssessmentCreatedStatus createdStatus)
+                if (entityStatus is AssessmentCreatedHubStatus createdStatus)
                 {
-                    var existingCreated = allStatuses.OfType<AssessmentCreatedStatus>()
+                    var existingCreated = allStatuses.OfType<AssessmentCreatedHubStatus>()
                         .FirstOrDefault(s => s.AssessmentId == createdStatus.AssessmentId);
                     if (existingCreated == null)
                     {
@@ -487,7 +487,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                         seenAnalyzing = true;
                     }
                 }
-                else if (status is AssessmentCreatedStatus created)
+                else if (status is AssessmentCreatedHubStatus created)
                 {
                     if (!seenCreatedIds.Contains(created.AssessmentId))
                     {
@@ -570,7 +570,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         {
             AssessmentGeneratingStatus gen => $"Generating: {gen.Message}",
             AssessmentAnalyzingStatus anal => $"Analyzing: {anal.Message}",
-            AssessmentCreatedStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
+            AssessmentCreatedHubStatus created => $"Created: ID={created.AssessmentId}, Hypothesis={created.Hypothesis}",
             GeneralStatus gen => $"General: {gen.Message}",
             _ => status.ToString() ?? "Unknown"
         };
@@ -635,7 +635,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
         return status switch
         {
             AssessmentGeneratingStatus => 1,
-            AssessmentCreatedStatus => 2,
+            AssessmentCreatedHubStatus => 2,
             AssessmentAnalyzingStatus => 3,
             _ => 5
         };
@@ -699,7 +699,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                 if (change.Action.ToLowerInvariant() == "created" &&
                     int.TryParse(change.Id, out var assessmentId))
                 {
-                    statusList.Add(new AssessmentCreatedStatus
+                    statusList.Add(new AssessmentCreatedHubStatus
                     {
                         AssessmentId = assessmentId,
                         Hypothesis = change.Name ?? "Assessment",
@@ -929,7 +929,7 @@ public partial class Chat : ComponentBase, IAsyncDisposable
                             element.TryGetProperty("hypothesis", out var hypothesisElement) &&
                             element.TryGetProperty("confidence", out var confidenceElement))
                         {
-                            statusList.Add(new AssessmentCreatedStatus
+                            statusList.Add(new AssessmentCreatedHubStatus
                             {
                                 AssessmentId = assessmentIdElement.GetInt32(),
                                 Hypothesis = hypothesisElement.GetString() ?? "Assessment",

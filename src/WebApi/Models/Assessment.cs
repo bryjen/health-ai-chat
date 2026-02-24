@@ -9,7 +9,8 @@ public class Assessment
 {
     public int Id { get; set; }
     public Guid UserId { get; set; }
-    public Guid ConversationId { get; set; }
+    /// <summary>Session ID (from SessionEntity) that this assessment belongs to. Nullable for backwards compat.</summary>
+    public Guid? ConversationId { get; set; }
 
     public required string Hypothesis { get; set; }
     public decimal Confidence { get; set; } // 0-1

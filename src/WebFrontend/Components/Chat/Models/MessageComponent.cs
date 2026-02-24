@@ -1,4 +1,6 @@
-﻿namespace WebFrontend.Components.Chat.Models;
+﻿using Web.Common.DTOs.Health;
+
+namespace WebFrontend.Components.Chat.Models;
 
 public abstract class MessageComponent;
 
@@ -32,7 +34,11 @@ public class UnknownMessageComponent : MessageComponent
 public class SymptomCreatedMessageComponent : MessageComponent
 {
     public required string RawJson { get; set; }
-    public int? SymptomId { get; set; }
-    public int? EpisodeId { get; set; }
-    public string? SymptomName { get; set; }
+    public SymptomCreatedStatus? Status { get; set; }
+}
+
+public class AssessmentCreatedMessageComponent : MessageComponent
+{
+    public required string RawJson { get; set; }
+    public AssessmentCreatedStatus? Status { get; set; }
 }

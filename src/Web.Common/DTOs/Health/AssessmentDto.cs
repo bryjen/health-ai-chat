@@ -3,7 +3,7 @@ namespace Web.Common.DTOs.Health;
 public class AssessmentDto
 {
     public int Id { get; set; }
-    public Guid ConversationId { get; set; }
+    public Guid? ConversationId { get; set; }
     public required string Hypothesis { get; set; }
     public decimal Confidence { get; set; } // 0-1
     public List<string>? Differentials { get; set; }

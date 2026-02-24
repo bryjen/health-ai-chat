@@ -36,17 +36,12 @@ public interface IAuthApiClient
     Task<AuthResponse> RefreshTokenAsync(RefreshTokenRequest request);
 
     /// <summary>
-    /// Gets the current authenticated user's information.
+    /// Gets the current authenticated user's profile, including personal details.
     /// </summary>
-    /// <returns>Current user details.</returns>
+    /// <returns>Current user profile.</returns>
     /// <exception cref="Exceptions.ApiUnauthorizedException">Thrown when user is not authenticated (401).</exception>
     /// <exception cref="Exceptions.ApiNotFoundException">Thrown when user is not found (404).</exception>
     /// <exception cref="Exceptions.ApiException">Thrown for other API errors.</exception>
-    Task<UserDto> GetCurrentUserAsync();
-
-    /// <summary>
-    /// Gets the current authenticated user's profile, including personal details.
-    /// </summary>
     Task<UserProfileDto> GetCurrentProfileAsync();
 
     /// <summary>

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
+using Web.Common.DTOs.Health;
 using WebApi.Services.Chat.Response;
 using WebApi.Services.Data;
 
@@ -12,10 +13,10 @@ namespace WebApi.Services.Chat.Plugins;
 
 public sealed class SymptomTrackerPlugin(
     IOptions<JsonOptions> jsonOptions,
+    ResponseWriter responseWriter,  // primarly used to emit "status updated"; also ensures that the model isn't generating/emitting anything
     AiState aiState,
     SymptomService symptomService,
     EpisodeService episodeService,
-    ResponseWriter responseWriter,  // primarly used to emit "status updated"; also ensures that the model isn't generating/emitting anything
     ILogger<SymptomTrackerPlugin> logger)
 {
     [Description("Create a new symptom and its first episode.")]
@@ -28,7 +29,16 @@ public sealed class SymptomTrackerPlugin(
             var symptom = await symptomService.GetOrCreateSymptomAsync(aiState.UserId, name, details);
             var episode = await episodeService.CreateEpisodeAsync(aiState.UserId, symptom.Id, DateTime.UtcNow);
 
-            var status = new { SymptomId = symptom.Id, EpisodeId = episode.Id, SymptomName = symptom.Name };
+            var status = new SymptomCreatedStatus
+            {
+                SymptomId          = symptom.Id,
+                EpisodeId          = episode.Id,
+                SymptomName        = symptom.Name,
+                SymptomDescription = symptom.Description,
+                EpisodeStage       = episode.Stage,
+                EpisodeStatus      = episode.Status,
+                StartedAt          = episode.StartedAt,
+            };
             await responseWriter.EmitRawAsync(
                 "SymptomCreated",
                 JsonSerializer.Serialize(status, jsonOptions.Value.JsonSerializerOptions),

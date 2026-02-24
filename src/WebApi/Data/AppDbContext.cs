@@ -115,6 +115,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasMaxLength(64);
             entity.Property(e => e.SerializedState).IsRequired();
+            entity.Property(e => e.UserId);
+            entity.HasIndex(e => e.UserId);
         });
 
         // Other entities (from obsolete, using conuhacks schema)
@@ -347,10 +349,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasOne(e => e.Conversation)
-                .WithMany()
-                .HasForeignKey(e => e.ConversationId)
-                .OnDelete(DeleteBehavior.Cascade);
+            // ConversationId is now nullable and not FK-enforced (decoupled from old Conversation table)
+            entity.Property(e => e.ConversationId).IsRequired(false);
+            entity.Ignore(e => e.Conversation);
 
             entity.HasMany(e => e.LinkedEpisodes)
                 .WithOne(l => l.Assessment)

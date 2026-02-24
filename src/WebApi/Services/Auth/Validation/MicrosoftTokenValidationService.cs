@@ -128,7 +128,10 @@ public class MicrosoftTokenValidationService(
                 throw new UnauthorizedAccessException("Microsoft ID token missing email");
             }
 
-            return new TokenValidationResult(userId, email);
+            var firstName = principal.FindFirst("given_name")?.Value;
+            var lastName = principal.FindFirst("family_name")?.Value;
+
+            return new TokenValidationResult(userId, email, firstName, lastName);
         }
         catch (SecurityTokenValidationException ex)
         {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -86,6 +87,13 @@ builder.Services.AddHttpClient("RefreshClient", client =>
     client.DefaultRequestHeaders.Accept.Add(jsonHeader);
 });
 
+builder.Services.AddSingleton(new JsonSerializerOptions
+{
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+    PropertyNameCaseInsensitive = true
+});
+
 // Register TokenRefreshHttpMessageHandler
 builder.Services.AddScoped<TokenRefreshHttpMessageHandler>(sp =>
 {
@@ -93,9 +101,10 @@ builder.Services.AddScoped<TokenRefreshHttpMessageHandler>(sp =>
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
     var refreshClient = httpClientFactory.CreateClient("RefreshClient");
     var localStorageTokenProvider = sp.GetRequiredService<LocalStorageTokenProvider>();
+    var jsonOptions = sp.GetRequiredService<JsonSerializerOptions>();
     var authService = sp.GetService<AuthService>();
     var authStateProvider = sp.GetService<AuthenticationStateProvider>();
-    return new TokenRefreshHttpMessageHandler(tokenProvider, refreshClient, localStorageTokenProvider, authService,
+    return new TokenRefreshHttpMessageHandler(tokenProvider, refreshClient, localStorageTokenProvider, jsonOptions, authService,
         authStateProvider);
 });
 
@@ -193,7 +202,8 @@ builder.Services.AddScoped<IOAuthProvider, GitHubOAuthProvider>();
 builder.Services.AddScoped<ChatHubClient>(sp =>
 {
     var tokenProvider = sp.GetRequiredService<ITokenProvider>();
-    return new ChatHubClient(tokenProvider);
+    var jsonOptions = sp.GetRequiredService<JsonSerializerOptions>();
+    return new ChatHubClient(tokenProvider, jsonOptions);
 });
 
 // Register location service for country/state/city selector

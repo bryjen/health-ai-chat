@@ -69,14 +69,11 @@ public static class DbConfiguration
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite("Data Source=salus.db"));
 
-        // TODO: Have seeding here in the future
-        // comment to disable db refreshing
-        /*
         using var scope = services.BuildServiceProvider().CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.EnsureCreated(); // only creates if doesn't exist
-        SeedData.Initialize(db);     // idempotent seed
-         */
+        // comment to disable db refreshing
+        // SeedData.Initialize(db);     // idempotent seed
     }
 
     // ReSharper disable once IdentifierTypo

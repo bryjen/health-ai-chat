@@ -13,16 +13,18 @@ public class AuthService
 {
     private readonly IAuthApiClient _authApiClient;
     private readonly LocalStorageTokenProvider _tokenProvider;
-    private UserDto? _currentUser;
+    private readonly JsonSerializerOptions _jsonOptions;
+    private UserProfileDto? _currentUser;
 
-    public AuthService(IAuthApiClient authApiClient, ITokenProvider tokenProvider)
+    public AuthService(IAuthApiClient authApiClient, ITokenProvider tokenProvider, JsonSerializerOptions jsonOptions)
     {
         _authApiClient = authApiClient;
-        _tokenProvider = tokenProvider as LocalStorageTokenProvider 
+        _tokenProvider = tokenProvider as LocalStorageTokenProvider
             ?? throw new ArgumentException("TokenProvider must be LocalStorageTokenProvider", nameof(tokenProvider));
+        _jsonOptions = jsonOptions;
     }
 
-    public UserDto? CurrentUser => _currentUser;
+    public UserProfileDto? CurrentUser => _currentUser;
 
     public async Task<bool> RegisterAsync(string email, string password, string? firstName = null, string? lastName = null)
     {
@@ -139,18 +141,13 @@ public class AuthService
         }
     }
 
-    public async Task<UserDto?> GetCurrentUserAsync()
+    public async Task<UserProfileDto?> GetCurrentUserAsync()
     {
         if (_currentUser != null)
             return _currentUser;
 
         await LoadCurrentUserAsync();
         return _currentUser;
-    }
-
-    public async Task<UserProfileDto> GetCurrentProfileAsync()
-    {
-        return await _authApiClient.GetCurrentProfileAsync();
     }
 
     public async Task<UserProfileDto> UpdateProfileAsync(UpdateUserProfileRequest request)
@@ -166,16 +163,16 @@ public class AuthService
             var userJson = await _tokenProvider.GetUserAsync();
             if (!string.IsNullOrWhiteSpace(userJson))
             {
-                _currentUser = JsonSerializer.Deserialize<UserDto>(userJson);
+                _currentUser = JsonSerializer.Deserialize<UserProfileDto>(userJson, _jsonOptions);
                 if (_currentUser != null)
                     return;
             }
 
             // If not in localStorage, fetch from API
-            _currentUser = await _authApiClient.GetCurrentUserAsync();
+            _currentUser = await _authApiClient.GetCurrentProfileAsync();
             if (_currentUser != null)
             {
-                await _tokenProvider.SetUserAsync(JsonSerializer.Serialize(_currentUser));
+                await _tokenProvider.SetUserAsync(JsonSerializer.Serialize(_currentUser, _jsonOptions));
             }
         }
         catch
@@ -190,7 +187,7 @@ public class AuthService
         _tokenProvider.SetToken(response.AccessToken);
         await _tokenProvider.SetRefreshTokenAsync(response.RefreshToken);
         _currentUser = response.User;
-        await _tokenProvider.SetUserAsync(JsonSerializer.Serialize(response.User));
+        await _tokenProvider.SetUserAsync(JsonSerializer.Serialize(response.User, _jsonOptions));
     }
 }
 

@@ -1,0 +1,69 @@
+@using Web.Common.DTOs.Health
+
+<div class="px-3 pb-3 pt-1 border-t border-border space-y-2.5 animate-accordion-down">
+
+    <!-- Episode ID + Stage row -->
+    <div class="flex items-center justify-between gap-4 pt-1">
+        <span class="text-muted-foreground">
+            Episode: <span class="font-mono text-foreground/80">@Status.EpisodeId</span>
+        </span>
+        @if (!string.IsNullOrWhiteSpace(Status.EpisodeStage))
+        {
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset @StageBadgeClass">
+                @Status.EpisodeStage
+            </span>
+        }
+    </div>
+
+    <!-- Description -->
+    @if (!string.IsNullOrWhiteSpace(Status.SymptomDescription))
+    {
+        <div>
+            <div class="text-muted-foreground mb-0.5">Description</div>
+            <p class="text-foreground/80 leading-relaxed">@Status.SymptomDescription</p>
+        </div>
+    }
+
+    <!-- Status + Started row -->
+    <div class="flex items-center gap-4">
+        @if (!string.IsNullOrWhiteSpace(Status.EpisodeStatus))
+        {
+            <div class="flex items-center gap-1.5">
+                <span class="text-muted-foreground">Status:</span>
+                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset @EpisodeStatusClass">
+                    @Status.EpisodeStatus
+                </span>
+            </div>
+        }
+        @if (Status.StartedAt.HasValue)
+        {
+            <div class="flex items-center gap-1.5">
+                <span class="text-muted-foreground">Started:</span>
+                <span class="text-foreground/80">@Status.StartedAt.Value.ToString("MMM d, yyyy")</span>
+            </div>
+        }
+    </div>
+
+</div>
+
+@code {
+    [Parameter]
+    public required SymptomCreatedStatus Status { get; set; }
+
+    private string StageBadgeClass => Status.EpisodeStage switch
+    {
+        "mentioned"     => "bg-muted text-muted-foreground ring-border",
+        "explored"      => "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20",
+        "characterized" => "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/20",
+        "linked"        => "bg-green-500/10 text-green-600 dark:text-green-400 ring-green-500/20",
+        _               => "bg-muted text-muted-foreground ring-border"
+    };
+
+    private string EpisodeStatusClass => Status.EpisodeStatus switch
+    {
+        "active"   => "bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/20",
+        "resolved" => "bg-green-500/10 text-green-600 dark:text-green-400 ring-green-500/20",
+        "chronic"  => "bg-amber-500/10 text-amber-600 dark:text-amber-400 ring-amber-500/20",
+        _          => "bg-muted text-muted-foreground ring-border"
+    };
+}
